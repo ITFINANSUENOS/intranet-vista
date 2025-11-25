@@ -11,7 +11,9 @@ import Users from './pages/Users';         // <--- EXISTENTE
 import Roles from './pages/Roles';         // <--- EXISTENTE
 import Companies from './pages/Companies'; // <--- EXISTENTE
 import Inventory from './pages/Inventory'; // <--- EXISTENTE
-import Documents from './pages/Documents'; // <--- EXISTENTE
+import Documents from './pages/Documents';
+import Positions from './pages/Positions'; 
+import Regionals from './pages/Regionals'; // <--- EXISTENTE
 import Help from './pages/Help';           // <--- EXISTENTE
 
 // 👈 NUEVA IMPORTACIÓN
@@ -34,6 +36,8 @@ function App() {
               <Route path="/users" element={<Users />} />
               <Route path="/roles" element={<Roles />} />
               <Route path="/companies" element={<Companies />} />
+              <Route path="/positions" element={<Positions />} />
+              <Route path="/regionals" element={<Regionals />} />
 
               {/* Rutas de Gestión y Operaciones */}
              

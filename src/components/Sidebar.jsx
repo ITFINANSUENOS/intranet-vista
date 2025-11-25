@@ -4,8 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { 
     HomeIcon, UsersIcon, ClipboardIcon, BriefcaseIcon, 
     ArchiveBoxIcon, DocumentTextIcon, LifebuoyIcon, 
-    ArrowLeftEndOnRectangleIcon, ChartBarIcon 
-} from '@heroicons/react/24/outline'; 
+    ArrowLeftEndOnRectangleIcon, ChartBarIcon, 
+    MapPinIcon
+} from '@heroicons/react/24/outline';
 
 // Definición de roles
 const R_ADMIN = 'Administrador';
@@ -72,6 +73,9 @@ export default function Sidebar() {
                         <NavItem to="/users" icon={UsersIcon}>Usuarios</NavItem>
                         <NavItem to="/roles" icon={ClipboardIcon}>Roles y Permisos</NavItem>
                         <NavItem to="/companies" icon={BriefcaseIcon}>Empresas</NavItem>
+                        {/* 👇 NUEVOS ÍTEMS PARA PUESTOS Y REGIONALES */}
+                        <NavItem to="/positions" icon={BriefcaseIcon}>Puestos</NavItem>
+                        <NavItem to="/regionals" icon={MapPinIcon}>Regionales</NavItem>
                     </>
                 )}
 
