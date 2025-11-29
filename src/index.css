@@ -67,3 +67,25 @@ button:focus-visible {
   }
 } */
 @import "tailwindcss";
+/* Ocultar barra de scroll para navegadores basados en WebKit (Chrome, Safari, Edge) */
+/*
+  ESTO DEBE IR EN TU ARCHIVO CSS GLOBAL (ej. index.css)
+*/
+
+/* .no-scrollbar { */
+    /* Oculta la barra de desplazamiento en Firefox */
+    /* scrollbar-width: none; */
+    /* Oculta la barra de desplazamiento en IE y Edge (versiones antiguas) */
+    /* -ms-overflow-style: none; */
+/* } */
+
+/* Oculta la barra de desplazamiento en navegadores basados en WebKit (Chrome, Safari, Edge) */
+/* .no-scrollbar::-webkit-scrollbar {
+    display: none;
+} */
+
+/* ---------------------------------------------------- */
+/*
+  OPCIONAL: Si deseas que la barra se vea en un tamaño muy pequeño
+  en lugar de desaparecer (estilo personalizado sutil), usa estas clases:
+*/
