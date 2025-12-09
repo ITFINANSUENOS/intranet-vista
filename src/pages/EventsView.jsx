@@ -4,16 +4,15 @@ import AuthenticatedLayout from '../layouts/AuthenticatedLayout';
 import { useAuth } from '../context/AuthContext';
 
 const ENDPOINT = '/events';
+const PRIMARY_COLOR = 'rgba(5, 25, 49)'; 
 
 export default function EventsView() {
     const { apiClient } = useAuth();
-    // Color principal solicitado para el diseño
-    const PRIMARY_COLOR = 'rgba(5, 25, 49)'; 
 
     const [events, setEvents] = useState([]);
     const [formData, setFormData] = useState({ 
-        title_event: '',      // <-- CORREGIDO
-        description_event: '',// <-- CORREGIDO
+        title_event: '',      
+        description_event: '',
         event_date: '' 
     });
     const [editingId, setEditingId] = useState(null);
@@ -31,6 +30,7 @@ export default function EventsView() {
             const response = await apiClient.get(ENDPOINT);
             setEvents(response.data);
         } catch (err) {
+            // Este error puede saltar si la API deniega el acceso por falta de permisos
             setError('Error al cargar eventos. Verifique su rol y conexión.');
             console.error(err);
         } finally {
@@ -54,7 +54,6 @@ export default function EventsView() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            // Aseguramos que los campos coincidan con la migración
             const dataToSend = {
                 title_event: formData.title_event,
                 description_event: formData.description_event,
@@ -78,12 +77,11 @@ export default function EventsView() {
 
     const handleEdit = (event) => {
         setEditingId(event.id);
-        // Formatea la fecha y hora a 'YYYY-MM-DDTHH:MM' para el input datetime-local
         const date = new Date(event.event_date);
         const formattedDate = date.toISOString().slice(0, 16);
         setFormData({
-            title_event: event.title_event,       // <-- CORREGIDO
-            description_event: event.description_event, // <-- CORREGIDO
+            title_event: event.title_event,       
+            description_event: event.description_event, 
             event_date: formattedDate,
         });
     };
@@ -109,7 +107,7 @@ export default function EventsView() {
                 
                 {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 shadow-md">¡Error! {error}</div>}
 
-                {/* Formulario Estético y Moderno */}
+                {/* Formulario */}
                 <form 
                     onSubmit={handleSubmit} 
                     className="bg-white p-8 rounded-xl shadow-2xl hover:shadow-3xl transition-shadow duration-500 mb-10 border border-gray-50/50"
@@ -121,7 +119,7 @@ export default function EventsView() {
                             <input 
                                 id="title_event"
                                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-300 placeholder-gray-400 shadow-sm" 
-                                name="title_event" // <-- CORREGIDO
+                                name="title_event" 
                                 value={formData.title_event} 
                                 onChange={handleChange} 
                                 placeholder="Ej: Conferencia Anual de Tecnología" 
@@ -149,7 +147,7 @@ export default function EventsView() {
                             <textarea 
                                 id="description_event"
                                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-300 placeholder-gray-400 shadow-sm" 
-                                name="description_event" // <-- CORREGIDO
+                                name="description_event" 
                                 value={formData.description_event} 
                                 onChange={handleChange} 
                                 placeholder="Detalles importantes sobre el evento..."
@@ -203,7 +201,11 @@ export default function EventsView() {
                                     <tr key={event.id} className="hover:bg-indigo-50/30 transition">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">{event.title_event}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(event.event_date).toLocaleString()}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{event.description_event.substring(0, 50)}{event.description_event.length > 50 ? '...' : ''}</td>
+                                        {/* CORRECCIÓN CRÍTICA PARA EVITAR TypeError */}
+                                        <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                                            {(event.description_event || '').substring(0, 50)}
+                                            {(event.description_event || '').length > 50 ? '...' : ''}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-center">
                                             <button 
                                                 onClick={() => handleEdit(event)} 

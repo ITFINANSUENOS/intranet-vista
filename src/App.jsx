@@ -19,6 +19,7 @@ import ObjectivesView from './pages/ObjectivesView';
 import EventsView from './pages/EventsView';
 import NewsView from './pages/NewsView';        
 import DatacreditoProcessingPage from './pages/DatacreditoProcessingPage'; 
+import CostCenterPage from './pages/CostCenterPage';
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
               <Route path="/companies" element={<Companies />} />
               <Route path="/positions" element={<Positions />} />
               <Route path="/regionals" element={<Regionals />} />
+              <Route path="/cost-centers" element={<CostCenterPage />} />
 
               {/* Rutas de Gestión y Operaciones */}
              

@@ -6,36 +6,42 @@ import {
     ArchiveBoxIcon, DocumentTextIcon, LifebuoyIcon, 
     ArrowLeftEndOnRectangleIcon, ChartBarIcon, 
     MapPinIcon, Cog6ToothIcon, UserCircleIcon, 
-    ChevronDownIcon, ChevronRightIcon, // Iconos para el despliegue
-    PencilSquareIcon // <-- NUEVO: Icono para la sección "Publicar"
+    ChevronDownIcon, ChevronRightIcon, 
+    PencilSquareIcon 
 } from '@heroicons/react/24/outline';
 
-// Define el color oscuro personalizado (para hover y texto)
 const DARK_COLOR = 'rgba(4, 24, 48)';
 
+// --- LÓGICA DE ACCESO CON PASE MAESTRO (CORREGIDA) ---
+// Esta función verifica si el usuario puede acceder a una vista específica
+const canAccess = (user, permissionName) => {
+    if (!user) return false;
+    
+    // Obtener los nombres de roles para la verificación (Ej: ['Administrador'])
+    const userRoleNames = Array.isArray(user.roles) 
+        ? user.roles.map(r => typeof r === 'string' ? r : r.name)
+        : [];
+        
+    // 1. PASE MAESTRO: Si el usuario tiene el rol 'Administrador', darle acceso total
+    if (userRoleNames.includes('Administrador')) {
+        return true;
+    }
 
-// Definición de roles
-const R_ADMIN = 'Administrador';
-const R_GESTOR = 'Gestor';
-const R_ADMINISTRATIVO = 'Administrativo';
-const R_ASESOR = 'Asesor';
-
-// Helper de roles
-const hasAnyRole = (user, rolesRequired) => {
-    if (!user || !user.roles) return false; 
-    const userRoles = user.roles.map(r => r.name || r); 
-    const required = Array.isArray(rolesRequired) ? rolesRequired : [rolesRequired];
-    return userRoles.some(role => required.includes(role));
+    // 2. Verificación estándar por permisos
+    // Tu UserController.php envía 'permissions' como un array de strings (Ej: ['view_users'])
+    if (user.permissions && Array.isArray(user.permissions)) {
+        return user.permissions.includes(permissionName);
+    }
+    
+    // Si no es Administrador y no tiene el permiso específico, no accede
+    return false; 
 };
 
-
-// Componente para los sub-ítems (elementos finales, dentro de los acordeones)
+// Componente para los sub-ítems del Sidebar
 const SubNavItem = ({ to, children }) => {
     const location = useLocation();
-    // Usa .startsWith para activar la clase si la ruta coincide con el inicio (útil para rutas anidadas)
     const isActive = location.pathname.startsWith(to);
     
-    // El hover de los sub-ítems se mantiene sutil (bg-gray-100) para no competir con los principales
     return (
         <Link 
             to={to} 
@@ -51,48 +57,30 @@ const SubNavItem = ({ to, children }) => {
     );
 };
 
-
-// Componente para los ítems principales (que pueden ser links o toggles de acordeón)
+// Componente principal del ítem de navegación
 const NavItem = ({ to, children, icon: Icon, isCollapsed, subItems = [] }) => {
     const location = useLocation();
-    
-    // Lógica para determinar si es un acordeón
     const isAccordion = subItems.length > 0;
-    
-    // Si es un acordeón, la apertura inicial se basa en si alguna sub-ruta está activa
     const initialOpen = isAccordion && subItems.some(item => location.pathname.startsWith(item.to));
-    const [isOpen, setIsOpen] = useState(initialOpen); // Estado para el acordeón (despliegue hacia abajo)
+    const [isOpen, setIsOpen] = useState(initialOpen);
 
-    // Determinar si el ítem (o alguno de sus sub-ítems) está activo
     const isActive = location.pathname.startsWith(to) && !isAccordion;
     const hasActiveSubItem = isAccordion && subItems.some(item => location.pathname.startsWith(item.to));
     const itemIsActive = isActive || hasActiveSubItem;
     
-    // Colores para el estado activo
     const textColor = itemIsActive ? 'white' : DARK_COLOR;
-    // Usa DARK_COLOR para el fondo activo
     const backgroundColor = itemIsActive ? DARK_COLOR : 'transparent';
 
     const handleClick = () => {
-        if (isAccordion) {
-            setIsOpen(!isOpen); // Si es un acordeón, cambia el estado de abierto/cerrado
-        }
-        // Si no es un acordeón, la navegación se maneja automáticamente por el componente Link
+        if (isAccordion) setIsOpen(!isOpen);
     };
     
-    // El ítem principal puede ser un botón (para acordeón) o un Link
     const Component = isAccordion ? 'button' : Link;
-
-    const navProps = isAccordion 
-        ? { onClick: handleClick } 
-        : { to };
-    
-    // Identificador para los estilos dinámicos de hover
+    const navProps = isAccordion ? { onClick: handleClick } : { to };
     const elementId = `nav-item-${children.replace(/\s/g, '-')}`;
 
     return (
-        <div className="relative group"> {/* Añadir 'group' aquí para el despliegue lateral */}
-            {/* El div actúa como contenedor para aplicar el hover correcto en modo colapsado */}
+        <div className="relative group">
             <div className={`rounded-lg transition-colors duration-300 ${elementId}`}>
                 <Component 
                     {...navProps}
@@ -100,21 +88,16 @@ const NavItem = ({ to, children, icon: Icon, isCollapsed, subItems = [] }) => {
                                 ${isCollapsed ? 'justify-center' : ''} 
                                 ${itemIsActive ? 'text-white' : 'text-gray-600'} 
                                 ${isAccordion ? 'font-bold' : 'font-medium'}`}
-                    style={{ 
-                        backgroundColor: backgroundColor,
-                        color: textColor,
-                    }}
+                    style={{ backgroundColor, color: textColor }}
                 >
                     <Icon className="w-6 h-6 flex-shrink-0" style={{ color: itemIsActive ? 'white' : DARK_COLOR }} />
                     
-                    {/* Texto visible solo en modo expandido */}
                     {!isCollapsed && (
                         <span className="ml-4 text-sm tracking-wide flex-grow text-left" style={{ color: itemIsActive ? 'white' : DARK_COLOR }}>
                             {children}
                         </span>
                     )}
                     
-                    {/* Indicador de despliegue para Acordeón (solo en modo expandido) */}
                     {isAccordion && !isCollapsed && (
                         isOpen 
                             ? <ChevronDownIcon className="w-4 h-4 ml-auto" style={{ color: itemIsActive ? 'white' : DARK_COLOR }} />
@@ -123,44 +106,33 @@ const NavItem = ({ to, children, icon: Icon, isCollapsed, subItems = [] }) => {
                 </Component>
             </div>
 
-            {/* Estilos para el hover: Aplica DARK_COLOR al fondo y blanco al texto/icono. Esto garantiza que las letras no se pierdan. */}
+            {/* Estilos dinámicos para hover */}
             <style jsx>{`
                 .${elementId}:hover > * { 
                     background-color: ${DARK_COLOR} !important;
-                    color: white !important; /* Asegura que la letra sea blanca */
+                    color: white !important;
                 }
-                .${elementId}:hover > * svg {
-                    color: white !important; /* Asegura que el icono sea blanco */
-                }
+                .${elementId}:hover > * svg { color: white !important; }
             `}</style>
 
-            {/* Sub-menú Desplegable Hacia Abajo (Acordeón, visible solo si NO está colapsado) */}
+            {/* Sub-menú (desplegado) */}
             {isAccordion && !isCollapsed && (
-                <div 
-                    className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-96 py-2' : 'max-h-0'}`}
-                >
+                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-96 py-2' : 'max-h-0'}`}>
                     <div className="space-y-1">
                         {subItems.map((item, index) => (
-                            <SubNavItem key={index} to={item.to}>
-                                {item.label}
-                            </SubNavItem>
+                            <SubNavItem key={index} to={item.to}>{item.label}</SubNavItem>
                         ))}
                     </div>
                 </div>
             )}
             
-            {/* Menú Desplegable lateral (solo si SÍ está colapsado) */}
+            {/* Sub-menú (colapsado - hover) */}
             {isAccordion && isCollapsed && (
-                <div 
-                    // Usamos un grupo para que el submenú se muestre al pasar el ratón sobre el icono colapsado
-                    className={`absolute left-full top-0 ml-2 w-56 p-2 bg-white rounded-xl shadow-2xl border border-gray-100 transition-opacity duration-300 origin-left z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible`}
-                >
+                <div className={`absolute left-full top-0 ml-2 w-56 p-2 bg-white rounded-xl shadow-2xl border border-gray-100 transition-opacity duration-300 origin-left z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible`}>
                     <div className='p-1 font-bold text-gray-700' style={{ color: DARK_COLOR }}>{children}</div>
                     <div className="space-y-1">
                         {subItems.map((item, index) => (
-                            <SubNavItem key={index} to={item.to}>
-                                {item.label}
-                            </SubNavItem>
+                            <SubNavItem key={index} to={item.to}>{item.label}</SubNavItem>
                         ))}
                     </div>
                 </div>
@@ -169,202 +141,129 @@ const NavItem = ({ to, children, icon: Icon, isCollapsed, subItems = [] }) => {
     );
 };
 
-
 export default function Sidebar() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
-    
-    // Estado para controlar si la barra lateral está colapsada/expandida (se controla con hover en CSS)
     const [isHovered, setIsHovered] = useState(false);
-    // isCollapsed es TRUE por defecto (barra pequeña) y FALSE al hacer hover (barra grande)
     const isCollapsed = !isHovered; 
 
     const handleLogout = () => {
-        logout(() => {
-            navigate('/login');
-        });
+        logout(() => navigate('/login'));
     };
     
-    // Opciones de Configuración (visible solo para Admin)
-    const configSubItems = hasAnyRole(user, [R_ADMIN]) ? [
-        { label: 'Gestión de Usuarios', to: '/users' },
-        { label: 'Roles y Permisos', to: '/roles' },
-        { label: 'Empresas Asociadas', to: '/companies' },
-        { label: 'Puestos de Trabajo', to: '/positions' },
-        { label: 'Regionalización', to: '/regionals' },
-    ] : [];
+    // ==========================================================
+    // CONFIGURACIÓN DE RUTAS BASADA EN PERMISOS (USANDO canAccess)
+    // ==========================================================
     
-    // **********************************************
-    // NUEVO: Opciones de Publicación (por rol)
-    // **********************************************
-    const publishSubItems = hasAnyRole(user, [R_ADMIN, R_GESTOR]) ? [
-        { label: 'Objetivos', to: '/objectives' },
-        { label: 'Eventos', to: '/events' },
-        { label: 'Noticias', to: '/news' },
-    ] : [];
+    // 1. Opciones de Configuración
+    const configSubItems = [
+        canAccess(user, 'view_users') && { label: 'Gestión de Usuarios', to: '/users' },
+        canAccess(user, 'view_roles') && { label: 'Roles y Permisos', to: '/roles' },
+        canAccess(user, 'view_companies') && { label: 'Empresas Asociadas', to: '/companies' },
+        canAccess(user, 'view_positions') && { label: 'Puestos de Trabajo', to: '/positions' },
+        canAccess(user, 'view_regionals') && { label: 'Regionalización', to: '/regionals' },
+        canAccess(user, 'view_cost_centers') && { label: 'Centros de Costo', to: '/cost-centers' },
+    ].filter(Boolean); // Elimina los valores 'false'
+    
+    // 2. Opciones de Publicación
+    const publishSubItems = [
+        canAccess(user, 'view_objectives') && { label: 'Objetivos', to: '/objectives' },
+        canAccess(user, 'view_events') && { label: 'Eventos', to: '/events' },
+        canAccess(user, 'view_news') && { label: 'Noticias', to: '/news' },
+    ].filter(Boolean);
 
-    // Opciones de Operaciones (filtradas por rol)
+    // 3. Opciones de Operaciones
     const operationalSubItems = [
-        hasAnyRole(user, [R_ADMIN]) && { 
-            label: 'Análisis DataCrédito', 
-            to: '/reportes/datacredito', 
-            icon: ChartBarIcon 
-        },
-        hasAnyRole(user, [R_ADMIN, R_GESTOR, R_ADMINISTRATIVO, R_ASESOR]) && { 
-            label: 'Control de Inventario', 
-            to: '/inventario', 
-            icon: ArchiveBoxIcon 
-        },
-        hasAnyRole(user, [R_ADMIN, R_GESTOR, R_ADMINISTRATIVO, R_ASESOR]) && { 
-            label: 'Repositorio Documental', 
-            to: '/documentos', 
-            icon: DocumentTextIcon 
-        },
-    ].filter(Boolean); // Filtrar nulls/falses
+        canAccess(user, 'view_datacredito') && { label: 'Análisis DataCrédito', to: '/reportes/datacredito' },
+        canAccess(user, 'view_inventory') && { label: 'Control de Inventario', to: '/inventario' },
+        canAccess(user, 'view_documents') && { label: 'Repositorio Documental', to: '/documentos' },
+    ].filter(Boolean);
     
     // Opciones de Soporte
     const supportSubItems = [
-        { label: 'Mesa de Ayuda', to: '/ayuda' },
-        { label: 'Documentación API', to: '/api-docs' },
-    ];
+        canAccess(user, 'view_help_desk') && { label: 'Mesa de Ayuda', to: '/ayuda' },
+        canAccess(user, 'view_api_docs') && { label: 'Documentación API', to: '/api-docs' },
+    ].filter(Boolean);
     
-    
-    // Estilos dinámicos
     const sidebarWidth = isCollapsed ? 'w-20' : 'w-64';
-    const transitionClass = 'transition-all duration-300 ease-in-out';
 
     return (
         <aside
-            // Controla el estado colapsado/expandido basado en el estado local de hover
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            className={`fixed top-0 left-0 h-screen ${sidebarWidth} bg-white text-gray-800 flex flex-col p-3 shadow-2xl z-50 ${transitionClass} group`}
-            style={{ borderRight: `1px solid rgba(4, 24, 48, 0.1)` }} // Borde sutil del color oscuro
+            className={`fixed top-0 left-0 h-screen ${sidebarWidth} bg-white text-gray-800 flex flex-col p-3 shadow-2xl z-50 transition-all duration-300 ease-in-out group`}
+            style={{ borderRight: `1px solid rgba(4, 24, 48, 0.1)` }}
         >
-            
-            {/* Logo Grande (sin texto) con tamaño dinámico y transición */}
+            {/* Logo */}
             <div className={`flex-shrink-0 mb-8 mt-2 pb-4 ${isCollapsed ? 'justify-center' : 'border-b border-gray-200'}`}>
                <div className={`flex items-center ${isCollapsed ? 'justify-center' : ''}`}>
-                    <img 
-                        src="../public/images/logos/logo.png" 
-                        alt="Logo" 
-                        // [CORRECCIÓN CLAVE]: w-10 h-10 es más seguro que w-16 h-16 dentro de un w-20.
-                        className={`object-contain transition-all duration-300 ${isCollapsed ? 'w-10 h-10' : 'w-60 h-25'}`} 
-                    />
+                    {/* Reemplaza esta línea con tu logo */}
+                    <img src="../public/images/logos/logo.png" alt="Logo" className={`object-contain transition-all duration-300 ${isCollapsed ? 'w-10 h-10' : 'w-60 h-25'}`} />
                 </div>
             </div>
 
-            {/* Navegación Principal (Sección que se desplaza y crece) */}
+            {/* Navegación */}
             <nav className="flex-grow space-y-2 overflow-y-auto custom-scrollbar-hidden"> 
+                {/* Dashboard: Verifica permiso view_dashboard */}
+                {canAccess(user, 'view_dashboard') && (
+                    <NavItem to="/dashboard" icon={HomeIcon} isCollapsed={isCollapsed}>
+                        Dashboard
+                    </NavItem>
+                )}
                 
-                {/* Ítem: Dashboard (Link simple) */}
-                <NavItem to="/dashboard" icon={HomeIcon} isCollapsed={isCollapsed}>
-                    Dashboard
-                </NavItem>
-                
-                {/* Ítem: Publicar (NUEVO ACORDEÓN) */}
+                {/* Si hay ítems de publicación accesibles, muestra el menú */}
                 {publishSubItems.length > 0 && (
-                     <NavItem 
-                        to="/publicar" // Usar una ruta base para activar la lógica de acordeón/ruta
-                        icon={PencilSquareIcon} 
-                        isCollapsed={isCollapsed}
-                        subItems={publishSubItems}
-                    >
+                     <NavItem to="/publicar" icon={PencilSquareIcon} isCollapsed={isCollapsed} subItems={publishSubItems}>
                         Publicar
                     </NavItem>
                 )}
                 
-                {/* Ítem: Operaciones (Acordeón/Dropdown) */}
+                {/* Si hay ítems de operaciones accesibles, muestra el menú */}
                 {operationalSubItems.length > 0 && (
-                     <NavItem 
-                        to="/operaciones" 
-                        icon={ClipboardIcon} 
-                        isCollapsed={isCollapsed}
-                        subItems={operationalSubItems}
-                    >
+                     <NavItem to="/operaciones" icon={ClipboardIcon} isCollapsed={isCollapsed} subItems={operationalSubItems}>
                         Operaciones
                     </NavItem>
                 )}
                 
-                {/* Ítem: Soporte (Acordeón/Dropdown) */}
-                <NavItem 
-                    to="/soporte" 
-                    icon={LifebuoyIcon} 
-                    isCollapsed={isCollapsed}
-                    subItems={supportSubItems}
-                >
-                    Soporte
-                </NavItem>
-                
+                {/* Si hay ítems de soporte accesibles, muestra el menú */}
+                {supportSubItems.length > 0 && (
+                    <NavItem to="/soporte" icon={LifebuoyIcon} isCollapsed={isCollapsed} subItems={supportSubItems}>
+                        Soporte
+                    </NavItem>
+                )}
             </nav>
 
-            {/* Sección Inferior: Configuración, Perfil y Cerrar Sesión (Fija en la parte inferior) */}
+            {/* Configuración y Perfil */}
             <div className="flex-shrink-0 mt-auto pt-4 border-t border-gray-200">
-                
-                {/* Ítem: Configuración (MOVIDO Y AJUSTADO AQUÍ ABAJO) */}
+                {/* Si hay ítems de configuración accesibles, muestra el menú */}
                 {configSubItems.length > 0 && (
                     <div className="mb-3">
-                        <NavItem 
-                            to="/configuracion" 
-                            icon={Cog6ToothIcon} 
-                            isCollapsed={isCollapsed}
-                            subItems={configSubItems}
-                        >
+                        <NavItem to="/configuracion" icon={Cog6ToothIcon} isCollapsed={isCollapsed} subItems={configSubItems}>
                             Configuración
                         </NavItem>
                     </div>
                 )}
 
-                {/* Tarjeta de Perfil */}
-                <div 
-                    className={`flex items-center p-3 mb-3 rounded-xl border border-gray-200 cursor-pointer transition-colors duration-300 profile-card`}
-                    style={{ '--dark-color': DARK_COLOR }}
-                >
+                <div className={`flex items-center p-3 mb-3 rounded-xl border border-gray-200 cursor-pointer transition-colors duration-300 profile-card`} style={{ '--dark-color': DARK_COLOR }}>
                     <UserCircleIcon className="w-6 h-6 flex-shrink-0" style={{ color: DARK_COLOR }} />
-                    
                     {!isCollapsed && (
                         <div className="ml-3 overflow-hidden">
                             <p className="text-sm font-semibold truncate" style={{ color: DARK_COLOR }}>{user?.name || 'Usuario'}</p>
-                            <p className="text-xs text-gray-500">{user?.roles?.[0]?.name || 'Rol'}</p>
+                            <p className="text-xs text-gray-500">{user?.roles?.[0] || 'Rol'}</p> {/* Asumiendo que roles es un array de strings */}
                         </div>
                     )}
-
-                     {/* Estilos para el hover de la tarjeta de perfil */}
-                    <style jsx>{`
-                        .profile-card:hover {
-                            background-color: ${DARK_COLOR} !important;
-                            border-color: ${DARK_COLOR} !important;
-                        }
-                        .profile-card:hover p {
-                            color: white !important;
-                        }
-                        .profile-card:hover svg {
-                            color: white !important;
-                        }
+                     <style jsx>{`
+                        .profile-card:hover { background-color: ${DARK_COLOR} !important; border-color: ${DARK_COLOR} !important; }
+                        .profile-card:hover p, .profile-card:hover svg { color: white !important; }
                     `}</style>
                 </div>
                 
-                {/* Botón de Cerrar Sesión */}
-                <button
-                    onClick={handleLogout}
-                    className={`w-full flex items-center p-3 text-red-500 transition-all duration-200 rounded-xl logout-button ${isCollapsed ? 'justify-center' : 'justify-start'}`}
-                >
+                <button onClick={handleLogout} className={`w-full flex items-center p-3 text-red-500 transition-all duration-200 rounded-xl logout-button ${isCollapsed ? 'justify-center' : 'justify-start'}`}>
                     <ArrowLeftEndOnRectangleIcon className="w-6 h-6 flex-shrink-0" />
-                    {!isCollapsed && (
-                        <span className="font-semibold text-sm ml-3" style={{ color: DARK_COLOR }}>Cerrar Sesión</span>
-                    )}
-
-                    {/* Estilos para el hover del botón de cerrar sesión */}
+                    {!isCollapsed && <span className="font-semibold text-sm ml-3" style={{ color: DARK_COLOR }}>Cerrar Sesión</span>}
                     <style jsx>{`
-                        .logout-button:hover {
-                            background-color: ${DARK_COLOR} !important;
-                        }
-                        .logout-button:hover span {
-                            color: white !important;
-                        }
-                        .logout-button:hover svg {
-                            color: white !important;
-                        }
+                        .logout-button:hover { background-color: ${DARK_COLOR} !important; }
+                        .logout-button:hover span, .logout-button:hover svg { color: white !important; }
                     `}</style>
                 </button>
             </div>
