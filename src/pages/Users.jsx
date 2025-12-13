@@ -1,43 +1,55 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import AuthenticatedLayout from '../layouts/AuthenticatedLayout';
 import { useAuth } from '../context/AuthContext';
-import { PencilIcon, TrashIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { 
+    PencilIcon, 
+    TrashIcon, 
+    PlusIcon, 
+    XMarkIcon, 
+    MagnifyingGlassIcon, 
+    FunnelIcon, 
+    ArrowPathIcon,
+    InformationCircleIcon 
+} from '@heroicons/react/24/outline'; 
 
 // --- CLASES DE ESTILO Y COLOR ---
-const PRIMARY_COLOR = 'rgba(5, 25, 49)'; // Color corporativo: #051931
+const PRIMARY_COLOR = 'rgba(5, 25, 49)'; 
 
-// Clase para errores llamativos: Rojo fuerte, texto blanco, sombra (para el error de la vista principal)
 const ERROR_CLASS_MAIN = 'p-4 font-bold text-white bg-red-700 rounded-lg shadow-xl border-2 border-red-800';
-// Clase para errores del modal (más discreto, pero aún visible)
 const ERROR_CLASS_MODAL = 'p-3 font-semibold text-red-800 bg-red-100 rounded-lg border border-red-300'; 
 
-// --- ROLES MANTENIDOS COMO DATO LOCAL (HARDCODED) ---
 const HARDCODED_ROLES = ['Administrador', 'Gestor', 'Administrativo', 'Asesor']; 
 
 // ===============================================
-// 1. COMPONENTE MODAL DE FORMULARIO
+// 1. COMPONENTE MODAL DE FORMULARIO (Mantenido)
 // ===============================================
 
-const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) => {
+const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions, isLoadingOptions }) => {
     if (!isOpen) return null;
+
+    if (isLoadingOptions) {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center max-w-sm w-full">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4" style={{ borderColor: PRIMARY_COLOR }}></div>
+                    <p className="text-gray-600 font-semibold text-center">Cargando datos<br/>(Empresas, Roles, etc.)...</p>
+                </div>
+            </div>
+        );
+    }
 
     const isEditing = !!userToEdit;
     const { apiClient } = useAuth();
     
-    // 🚨 NUEVOS: Incluimos costCenters de las opciones
     const { roles, companies, regionals, positions, costCenters } = selectOptions; 
     
-    // Inicializa IDs con valores predeterminados seguros
     const defaultCompanyId = companies[0]?.id || ''; 
     const defaultRegionalId = regionals[0]?.id || '';
     const defaultPositionId = positions[0]?.id || '';
-    // 🚨 NUEVO: Valor predeterminado para Centro de Costo
     const defaultCostCenterId = costCenters[0]?.id || ''; 
     const defaultRoleName = roles[0]?.name || HARDCODED_ROLES[0]; 
     
-    // Estado para la lista filtrada de Centros de Costo
     const [filteredCostCenters, setFilteredCostCenters] = useState([]);
-
 
     const [formData, setFormData] = useState({
         name_user: userToEdit?.name_user || '',
@@ -48,7 +60,7 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
         company_id: userToEdit?.company_id || defaultCompanyId,
         regional_id: userToEdit?.regional_id || defaultRegionalId,
         position_id: userToEdit?.position_id || defaultPositionId,
-        cost_center_id: userToEdit?.cost_center_id || defaultCostCenterId, // 🚨 NUEVO CAMPO
+        cost_center_id: userToEdit?.cost_center_id || defaultCostCenterId,
         password: '',
         confirm_password: '', 
         role_name: userToEdit?.roles?.[0]?.name || defaultRoleName,
@@ -57,12 +69,10 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-
     // --- EFECTO 1: Inicialización y Reseteo del Formulario ---
     useEffect(() => {
         const currentDefaultRoleName = roles[0]?.name || HARDCODED_ROLES[0];
         
-        // Buscamos el ID del Centro de Costo si estamos editando
         const userCostCenterId = userToEdit?.cost_center_id || defaultCostCenterId;
         const userRegionalId = userToEdit?.regional_id || defaultRegionalId;
 
@@ -76,9 +86,9 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
                 company_id: userToEdit.company_id || defaultCompanyId,
                 regional_id: userRegionalId,
                 position_id: userToEdit.position_id || defaultPositionId,
-                cost_center_id: userCostCenterId, // Usamos el valor del usuario
-                password: '', // Se resetea para edición
-                confirm_password: '', // Se resetea para edición
+                cost_center_id: userCostCenterId,
+                password: '',
+                confirm_password: '',
                 role_name: userToEdit.roles?.[0]?.name || currentDefaultRoleName,
             });
         } else {
@@ -87,15 +97,13 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
                 company_id: defaultCompanyId,
                 regional_id: defaultRegionalId,
                 position_id: defaultPositionId,
-                cost_center_id: defaultCostCenterId, // Usamos el valor por defecto
+                cost_center_id: defaultCostCenterId,
                 password: '',
                 confirm_password: '',
                 role_name: currentDefaultRoleName,
             });
         }
         setError(null);
-    // Añadimos costCenters a las dependencias para que se reinicie el formulario
-    // si las opciones cambian, lo cual es útil si las opciones se cargan después.
     }, [userToEdit, isOpen, roles, companies, regionals, positions, costCenters, defaultCompanyId, defaultRegionalId, defaultPositionId, defaultCostCenterId]);
 
 
@@ -107,35 +115,31 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
             const filtered = costCenters.filter(cc => cc.regional_id === regionalId);
             setFilteredCostCenters(filtered);
 
-            // Si el Centro de Costo actual NO pertenece a la nueva Regional, lo reseteamos.
             const currentCCId = parseInt(formData.cost_center_id);
             if (currentCCId && !filtered.some(cc => cc.id === currentCCId)) {
                 setFormData(prev => ({ ...prev, cost_center_id: '' }));
             }
+
         } else {
             setFilteredCostCenters([]);
-            // Si no hay regional seleccionada o no hay centros de costo, forzar el reseteo
-            setFormData(prev => ({ ...prev, cost_center_id: '' })); 
+            if (regionalId && costCenters.length > 0 || !regionalId) {
+                 setFormData(prev => ({ ...prev, cost_center_id: '' })); 
+            }
         }
-    }, [formData.regional_id, costCenters]);
+    }, [formData.regional_id, costCenters, formData.cost_center_id]);
 
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         
-        // Mapea los campos de ID a enteros o cadena vacía si es necesario
         const val = ['company_id', 'regional_id', 'position_id', 'cost_center_id'].includes(name) 
                     ? (value === '' ? '' : parseInt(value)) 
                     : value;
         
         let newFormData = { ...formData, [name]: val };
 
-        // 🚨 Lógica específica al cambiar la Regional
         if (name === 'regional_id') {
-            // Cuando cambia la regional, el centro de costo debe resetearse.
             newFormData.cost_center_id = '';
-            
-            // Forzar el useEffect de filtrado (aunque React ya lo maneja por dependencia)
             const newRegionalId = parseInt(val);
             if (costCenters.length > 0 && newRegionalId) {
                 const filtered = costCenters.filter(cc => cc.regional_id === newRegionalId);
@@ -157,7 +161,6 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
         
         const isPasswordProvided = !!dataToSend.password;
 
-        // 🚨 VALIDACIÓN DE CONTRASEÑAS (Mantenemos tu lógica)
         if (isPasswordProvided || (!isEditing && dataToSend.confirm_password)) {
             if (dataToSend.password !== dataToSend.confirm_password) {
                 setError("La contraseña y la confirmación de contraseña no coinciden.");
@@ -170,23 +173,19 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
              return;
         }
 
-        // Limpieza de datos antes de enviar al API
         delete dataToSend.confirm_password; 
 
-        // Regla para la contraseña al editar: si está vacía, no la envíes
         if (isEditing && !isPasswordProvided) {
             delete dataToSend.password;
         }
         
-        // Aseguramos que los IDs son enteros
         dataToSend.company_id = parseInt(dataToSend.company_id);
         dataToSend.regional_id = parseInt(dataToSend.regional_id);
         dataToSend.position_id = parseInt(dataToSend.position_id);
-        // 🚨 NUEVO: Aseguramos que el ID de Centro de Costo es un entero (o null/undefined si no se selecciona)
         if (dataToSend.cost_center_id) {
              dataToSend.cost_center_id = parseInt(dataToSend.cost_center_id);
         } else {
-             delete dataToSend.cost_center_id; // Para enviar null o no enviar el campo si está vacío
+             dataToSend.cost_center_id = null;
         }
 
 
@@ -195,26 +194,17 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
             if (isEditing) {
                 response = await apiClient.put(`/users/${userToEdit.id}`, dataToSend);
             } else {
-                // 🚀 Esta ruta POST /users ahora es la que usa el administrador
-                // gracias a la modificación en api.php.
                 response = await apiClient.post('/users', dataToSend);
             }
-            
-            // Añadir el Centro de Costo a la respuesta para actualizar la lista (si es necesario)
             onSave(response.data.data || response.data); 
             onClose();
         } catch (err) {
             console.error("Error al guardar usuario:", err.response?.data || err);
             const apiErrors = err.response?.data?.errors;
-            
-            // 🚨 MENSAJE DE ERROR EN ESPAÑOL
             let errorMessage = err.response?.data?.message || "Error al guardar. Verifique los datos e inténtelo de nuevo.";
-            
             if (apiErrors) {
-                // Si hay errores de validación, los adjuntamos
                 errorMessage += ": " + Object.keys(apiErrors).map(key => apiErrors[key].join(', ')).join(' | ');
             }
-
             setError(errorMessage);
         } finally {
             setLoading(false);
@@ -225,7 +215,6 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 relative">
                 
-                {/* TÍTULO CON COLOR CORPORATIVO */}
                 <h3 className="text-2xl font-bold mb-4 border-b pb-2" style={{ color: PRIMARY_COLOR }}>
                     {isEditing ? 'Editar Usuario' : 'Crear Nuevo Usuario'}
                 </h3>
@@ -237,7 +226,6 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
                     <XMarkIcon className="w-6 h-6" />
                 </button>
 
-                {/* 🚨 MENSAJE DE ERROR LLAMATIVO */}
                 {error && <div className={ERROR_CLASS_MODAL}>{error}</div>}
 
                 <form onSubmit={handleSubmit}>
@@ -246,205 +234,87 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Nombre</label>
-                            <input 
-                                type="text" 
-                                name="name_user"
-                                value={formData.name_user}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md"
-                                required
-                            />
+                            <input type="text" name="name_user" value={formData.name_user} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md" required />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Apellido</label>
-                            <input 
-                                type="text" 
-                                name="last_name_user"
-                                value={formData.last_name_user}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md"
-                                required
-                            />
+                            <input type="text" name="last_name_user" value={formData.last_name_user} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md" required />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Email</label>
-                            <input 
-                                type="email" 
-                                name="email"
-                                value={formData.email}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md"
-                                required
-                            />
+                            <input type="email" name="email" value={formData.email} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md" required />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">N° Documento</label>
-                            <input 
-                                type="text" 
-                                name="number_document"
-                                value={formData.number_document}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md"
-                                required
-                            />
+                            <input type="text" name="number_document" value={formData.number_document} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md" required />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Fecha de Nacimiento</label>
-                            <input 
-                                type="date" 
-                                name="birthdate"
-                                value={formData.birthdate}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md"
-                            />
+                            <input type="date" name="birthdate" value={formData.birthdate} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md" />
                         </div>
                     </div>
                     
                     {/* Sección 2: Datos Organizacionales */}
                     <h4 className="text-lg font-semibold my-4 border-b pb-2 pt-4" style={{ color: PRIMARY_COLOR }}>Datos Organizacionales</h4>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                        {/* Dropdown Empresa */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Empresa</label>
-                            <select
-                                name="company_id"
-                                value={formData.company_id}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white"
-                                required
-                                disabled={companies.length === 0}
-                            >
+                            <select name="company_id" value={formData.company_id} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white" required disabled={companies.length === 0}>
                                 <option value="" disabled>Selecciona una empresa</option> 
-                                {companies.map(item => (
-                                    <option key={item.id} value={item.id}>{item.name_company || item.name}</option>
-                                ))}
+                                {companies.map(item => (<option key={item.id} value={item.id}>{item.name_company || item.name}</option>))}
                             </select>
-                            {companies.length === 0 && <p className="text-xs text-red-500 mt-1">Cargando empresas...</p>}
                         </div>
-                        {/* Dropdown Regional */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Regional</label>
-                            <select
-                                name="regional_id"
-                                value={formData.regional_id}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white"
-                                required
-                                disabled={regionals.length === 0}
-                            >
+                            <select name="regional_id" value={formData.regional_id} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white" required disabled={regionals.length === 0}>
                                 <option value="" disabled>Selecciona una regional</option>
-                                {regionals.map(item => (
-                                    <option key={item.id} value={item.id}>{item.name_regional || item.name}</option>
-                                ))}
+                                {regionals.map(item => (<option key={item.id} value={item.id}>{item.name_regional || item.name}</option>))}
                             </select>
-                            {regionals.length === 0 && <p className="text-xs text-red-500 mt-1">Cargando regionales...</p>}
                         </div>
-                         {/* Dropdown Centro de Costo (¡NUEVO!) */}
                          <div>
                             <label className="block text-sm font-medium text-gray-700">Centro de Costo</label>
-                            <select
-                                name="cost_center_id"
-                                value={formData.cost_center_id}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white"
-                                // No es required si lo hiciste nullable en la DB
-                                disabled={!formData.regional_id || filteredCostCenters.length === 0}
-                            >
+                            <select name="cost_center_id" value={formData.cost_center_id} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white" disabled={!formData.regional_id || filteredCostCenters.length === 0}>
                                 <option value="">(Opcional / Sin asignar)</option>
-                                {filteredCostCenters.map(item => (
-                                    <option key={item.id} value={item.id}>{item.cost_center_name || item.name}</option>
-                                ))}
+                                {filteredCostCenters.map(item => (<option key={item.id} value={item.id}>{item.cost_center_name || item.name}</option>))}
                             </select>
-                            {!formData.regional_id && <p className="text-xs text-red-500 mt-1">Selecciona una Regional primero.</p>}
-                            {formData.regional_id && filteredCostCenters.length === 0 && <p className="text-xs text-red-500 mt-1">No hay Centros de Costo para esta Regional.</p>}
                         </div>
-                        {/* Dropdown Posición */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Posición</label>
-                            <select
-                                name="position_id"
-                                value={formData.position_id}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white"
-                                required
-                                disabled={positions.length === 0}
-                            >
+                            <select name="position_id" value={formData.position_id} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white" required disabled={positions.length === 0}>
                                 <option value="" disabled>Selecciona una posición</option>
-                                {positions.map(item => (
-                                    <option key={item.id} value={item.id}>{item.name_position || item.name}</option>
-                                ))}
+                                {positions.map(item => (<option key={item.id} value={item.id}>{item.name_position || item.name}</option>))}
                             </select>
-                            {positions.length === 0 && <p className="text-xs text-red-500 mt-1">Cargando puestos...</p>}
                         </div>
                     </div>
 
                     {/* Sección 3: Rol y Contraseña */}
                     <h4 className="text-lg font-semibold my-4 border-b pb-2 pt-4" style={{ color: PRIMARY_COLOR }}>Seguridad y Rol</h4>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                        
-                        {/* Dropdown Rol */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Rol</label>
-                            <select
-                                name="role_name"
-                                value={formData.role_name}
-                                onChange={handleChange}
-                                className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white"
-                                required
-                                disabled={roles.length === 0}
-                            >
+                            <select name="role_name" value={formData.role_name} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white" required disabled={roles.length === 0}>
                                 <option value="" disabled>Selecciona un rol</option>
-                                {roles.map(role => (
-                                    <option key={role.id} value={role.name}>{role.name}</option>
-                                ))}
+                                {roles.map(role => (<option key={role.id} value={role.name}>{role.name}</option>))}
                             </select>
-                            {roles.length === 0 && <p className="text-xs text-red-500 mt-1">Cargando roles...</p>}
                         </div>
-                        
-                        {/* Campos Contraseña y Confirmación */}
                         <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4"> 
-                            
-                            {/* Campo Contraseña */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Contraseña {isEditing && "(Dejar vacío para no cambiar)"}
-                                </label>
-                                <input 
-                                    type="password" 
-                                    name="password"
-                                    value={formData.password}
-                                    onChange={handleChange}
-                                    className="mt-1 w-full p-2 border border-gray-300 rounded-md"
-                                    required={!isEditing}
-                                />
+                                <label className="block text-sm font-medium text-gray-700">Contraseña {isEditing && "(Dejar vacío para no cambiar)"}</label>
+                                <input type="password" name="password" value={formData.password} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md" required={!isEditing} />
                             </div>
-
-                            {/* Campo Confirmar Contraseña (NUEVO) */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">
-                                    Confirmar Contraseña
-                                </label>
-                                <input 
-                                    type="password" 
-                                    name="confirm_password"
-                                    value={formData.confirm_password}
-                                    onChange={handleChange}
-                                    className="mt-1 w-full p-2 border border-gray-300 rounded-md"
-                                    // Se requiere si es una creación O si el campo password tiene contenido.
-                                    required={!isEditing || !!formData.password}
-                                />
+                                <label className="block text-sm font-medium text-gray-700">Confirmar Contraseña</label>
+                                <input type="password" name="confirm_password" value={formData.confirm_password} onChange={handleChange} className="mt-1 w-full p-2 border border-gray-300 rounded-md" required={!isEditing || !!formData.password} />
                             </div>
                         </div>
-
                     </div>
 
                     <div className="border-t pt-6">
-                        {/* BOTÓN SUBMIT CON COLOR CORPORATIVO */}
                         <button 
                             type="submit"
-                            disabled={loading || companies.length === 0 || regionals.length === 0 || positions.length === 0 || roles.length === 0} 
+                            disabled={loading || companies.length === 0} 
                             className="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition font-bold disabled:opacity-50"
-                            style={{ backgroundColor: PRIMARY_COLOR, transition: 'background-color 0.2s' }}
+                            style={{ backgroundColor: PRIMARY_COLOR }}
                             onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(5, 25, 49, 0.9)'}
                             onMouseOut={e => e.currentTarget.style.backgroundColor = PRIMARY_COLOR}
                         >
@@ -459,148 +329,402 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions }) =
 
 
 // ===============================================
-// 2. COMPONENTE PRINCIPAL Users
+// 2. COMPONENTE MODAL DE DETALLES (Actualizado para mostrar 'cargando...')
 // ===============================================
 
+const UserDetailsModal = ({ isOpen, onClose, user, getCompanyName, getCostCenterName, getPositionName }) => {
+    if (!isOpen || !user) return null;
+
+    const PRIMARY_COLOR = 'rgba(5, 25, 49)';
+    
+    // Si la información de las relaciones aún no está cargada, mostramos un spinner
+    const isFullDataLoaded = user.company && user.regional && user.position;
+    
+    if (!isFullDataLoaded) {
+         return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center max-w-sm w-full">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 mb-4" style={{ borderColor: PRIMARY_COLOR }}></div>
+                    <p className="text-gray-600 font-semibold text-center">Cargando detalles del usuario...</p>
+                </div>
+            </div>
+        );
+    }
+    
+    // Datos completos (solo disponibles si isFullDataLoaded es true)
+    const positionName = user.position?.name_position || user.position?.name || getPositionName(user.position_id);
+    const companyName = user.company?.name_company || user.company?.name || getCompanyName(user.company_id);
+    const costCenterName = user.cost_center?.cost_center_name || user.cost_center?.name || getCostCenterName(user.cost_center_id);
+    const birthdateValue = user.birthdate?.split('T')[0];
+    const formattedBirthdate = birthdateValue ? new Date(birthdateValue).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A';
+    const regionalName = user.regional?.name_regional || user.regional?.name || 'N/A';
+
+
+    const dataSections = [
+        {
+            title: "Datos Personales",
+            items: [
+                { label: "Nombre Completo", value: `${user.name_user || user.name} ${user.last_name_user || ''}` },
+                { label: "Email", value: user.email },
+                { label: "N° Documento", value: user.number_document },
+                { label: "F. Nacimiento", value: formattedBirthdate },
+            ]
+        },
+        {
+            title: "Datos Organizacionales",
+            items: [
+                { label: "Empresa", value: companyName },
+                { label: "Regional", value: regionalName },
+                { label: "Centro de Costo", value: costCenterName },
+                { label: "Cargo/Puesto", value: positionName },
+            ]
+        },
+        {
+            title: "Seguridad y Roles",
+            items: [
+                { label: "Roles", value: user.roles.map(r => r.name).join(', ') || 'Sin rol' },
+            ]
+        }
+    ];
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 relative">
+                <h3 className="text-2xl font-bold mb-4 border-b pb-2 flex items-center" style={{ color: PRIMARY_COLOR }}>
+                    <InformationCircleIcon className="w-6 h-6 mr-2" />
+                    Detalle de {user.name_user || user.name}
+                </h3>
+                
+                <button 
+                    onClick={onClose} 
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition"
+                >
+                    <XMarkIcon className="w-6 h-6" />
+                </button>
+
+                <div className="space-y-6">
+                    {dataSections.map((section, index) => (
+                        <div key={index} className="border p-4 rounded-lg bg-gray-50">
+                            <h4 className="text-lg font-semibold mb-3 border-b pb-1" style={{ color: PRIMARY_COLOR }}>{section.title}</h4>
+                            <dl className="space-y-2">
+                                {section.items.map((item, itemIndex) => (
+                                    <div key={itemIndex} className="flex flex-col">
+                                        <dt className="text-sm font-medium text-gray-500">{item.label}</dt>
+                                        <dd className="text-base font-semibold text-gray-900">{item.value || 'N/A'}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="border-t pt-4 mt-6">
+                    <button 
+                        onClick={onClose}
+                        className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition font-bold"
+                        style={{ backgroundColor: PRIMARY_COLOR }}
+                        onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(5, 25, 49, 0.9)'}
+                        onMouseOut={e => e.currentTarget.style.backgroundColor = PRIMARY_COLOR}
+                    >
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+// ===============================================
+// 3. COMPONENTE PRINCIPAL Users
+// ===============================================
+
+const Pagination = ({ meta, onPageChange }) => {
+    if (!meta || meta.last_page <= 1) return null;
+
+    const { current_page, last_page, total } = meta;
+    const handlePageClick = (page) => {
+        if (page >= 1 && page <= last_page && page !== current_page) {
+            onPageChange(page);
+        }
+    };
+
+    return (
+        <div className="flex justify-between items-center py-3 px-4 bg-gray-50 border-t">
+            <div className="text-sm text-gray-700">
+                Mostrando página **{current_page}** de **{last_page}** (**{total}** registros en total)
+            </div>
+            <div className="flex items-center space-x-2">
+                <button onClick={() => handlePageClick(current_page - 1)} disabled={current_page === 1} className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50">Anterior</button>
+                <span className="px-3 py-1 text-sm font-bold text-white rounded-lg" style={{ backgroundColor: PRIMARY_COLOR }}>{current_page}</span>
+                <button onClick={() => handlePageClick(current_page + 1)} disabled={current_page === last_page} className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 disabled:opacity-50">Siguiente</button>
+            </div>
+        </div>
+    );
+};
+
+
 export default function Users() {
-    const { apiClient } = useAuth();
+    // IMPORTANTE: Asumimos que `logOut` existe en useAuth para cerrar sesión
+    const { apiClient, logOut } = useAuth(); 
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true); 
     const [error, setError] = useState(null);
     
+    const [paginationMeta, setPaginationMeta] = useState(null);
+    
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
 
-    const [selectOptions, setSelectOptions] = useState({
-        roles: [],
-        companies: [],
-        regionals: [],
-        positions: [],
-        costCenters: [], // 🚨 NUEVO: Lista para Centros de Costo
-    });
-    const [optionsLoading, setOptionsLoading] = useState(true);
+    // Estado para el modal de detalle: solo tiene el usuario base al inicio
+    const [viewingUserDetail, setViewingUserDetail] = useState(null); 
 
-    // FUNCIÓN DE CARGA DE OPCIONES
-    const fetchSelectOptions = async () => {
+    const [filters, setFilters] = useState({
+        search: '', 
+        company_id: '',
+        cost_center_id: '',
+        position_id: '',
+    });
+    const [filteredCostCenters, setFilteredCostCenters] = useState([]);
+
+    const [selectOptions, setSelectOptions] = useState({
+        roles: [], companies: [], regionals: [], positions: [], costCenters: [], 
+    });
+    
+    const [optionsLoading, setOptionsLoading] = useState(false);
+    const [optionsLoaded, setOptionsLoaded] = useState(false);
+
+    // Función de carga de opciones (Mantenida)
+    const fetchSelectOptions = useCallback(async () => {
+        if (optionsLoaded || optionsLoading) return;
         setOptionsLoading(true);
         try {
-            // 🚨 NUEVO: Solicitud para Centros de Costo
             const [companiesRes, regionalsRes, positionsRes, rolesRes, costCentersRes] = await Promise.all([
                 apiClient.get('/companies'), 
                 apiClient.get('/regionals'), 
                 apiClient.get('/positions'), 
                 apiClient.get('/roles'),
-                apiClient.get('/cost-centers'), // 🚨 NUEVO ENDPOINT
+                apiClient.get('/cost-centers'),
             ]);
 
-            setSelectOptions(prev => ({
-                ...prev,
+            setSelectOptions({
                 companies: companiesRes.data.data || companiesRes.data,
                 regionals: regionalsRes.data.data || regionalsRes.data,
                 positions: positionsRes.data.data || positionsRes.data,
                 roles: rolesRes.data.data || rolesRes.data, 
-                costCenters: costCentersRes.data.data || costCentersRes.data, // 🚨 NUEVO: Guardar C. de Costo
-            }));
+                costCenters: costCentersRes.data.data || costCentersRes.data,
+            });
+            setOptionsLoaded(true);
         } catch (err) {
-            console.error('Error al cargar datos de opciones para el formulario:', err.response?.data || err);
-            // 🚨 MENSAJE DE ERROR EN ESPAÑOL
-            setError('Error al cargar datos del sistema (Roles, Empresas, Regionales, Puestos o Centros de Costo). Verifique la conexión con el servidor.');
-            setSelectOptions(prev => ({ ...prev, roles: [], costCenters: [] })); // Reseteamos también Centros de Costo
+            console.error('Error al cargar datos de opciones:', err.response?.data || err);
+            setError('Error al cargar opciones (Empresas, Roles, etc.). Verifica tu conexión.');
+             // Manejo de Error 401: si la API falla aquí, es que el token expiró
+            if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+                 setError('Su sesión ha expirado. Redirigiendo al login...');
+                 logOut(); // Llama a la función de logout para limpiar sesión y redirigir
+            }
         } finally {
             setOptionsLoading(false);
         }
-    };
+    }, [apiClient, optionsLoaded, optionsLoading, logOut]);
     
-    // Función de carga de usuarios (Mantenida)
-    const fetchUsers = async () => {
+    // Función de carga de usuarios (Optimización y Error 401)
+    const fetchUsers = useCallback(async (page = 1, currentFilters = filters) => {
         setLoading(true);
         setError(null);
         try {
-            // 🚨 SOLUCIÓN: Usamos el parámetro included para cargar las relaciones.
-            // Para listar, se necesita la relación 'costCenter' para la nueva columna.
-            const response = await apiClient.get('/users?included=roles,costCenter'); 
-            const fetchedUsers = (response.data.data || response.data).map(u => ({
+            const queryParams = new URLSearchParams({
+                page: page,
+                per_page: 10,
+                // OPTIMIZACIÓN: Solo incluimos roles y position (puesto) para la tabla
+                // Ya no es estrictamente necesario, pero lo mantenemos si el scope 'included' es custom
+                included: 'roles,position', 
+            });
+
+            if (currentFilters.search) {
+                queryParams.append('search', currentFilters.search);
+            }
+            if (currentFilters.company_id) {
+                queryParams.append('company_id', currentFilters.company_id);
+            }
+            if (currentFilters.cost_center_id) {
+                queryParams.append('cost_center_id', currentFilters.cost_center_id);
+            }
+            if (currentFilters.position_id) {
+                queryParams.append('position_id', currentFilters.position_id);
+            }
+
+            const response = await apiClient.get(`/users?${queryParams.toString()}`); 
+            
+            const usersData = response.data.data;
+            const paginationMeta = {
+                current_page: response.data.current_page,
+                last_page: response.data.last_page,
+                total: response.data.total,
+            };
+            
+            const formattedUsers = usersData.map(u => ({
                  ...u,
                  roles: Array.isArray(u.roles) ? u.roles : (u.roles ? [{ name: u.roles[0] }] : [{ name: 'Sin rol' }])
             }));
-            setUsers(fetchedUsers);
+            
+            setUsers(formattedUsers);
+            setPaginationMeta(paginationMeta); 
         } catch (err) {
-            // 🚨 MENSAJE DE ERROR EN ESPAÑOL
-            setError('Error al cargar los usuarios. Revise la consola y el endpoint /users.');
+            // Manejo de Error 401: Si el API devuelve 401 o 403 (No autorizado/Prohibido)
+            if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+                setError('Su sesión ha expirado. Redirigiendo al login...');
+                logOut(); // Llama a la función de logout para limpiar sesión y redirigir
+            } else {
+                setError('Error al cargar los usuarios. Revise la consola y el endpoint /users.');
+            }
             console.error(err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [apiClient, filters, logOut]);
+
 
     useEffect(() => {
         fetchUsers();
-        fetchSelectOptions(); 
-    }, [apiClient]);
+        if (!optionsLoaded && !optionsLoading) {
+            fetchSelectOptions();
+        }
+    }, [apiClient, fetchUsers, fetchSelectOptions, optionsLoaded, optionsLoading]);
 
+
+    useEffect(() => {
+        setFilteredCostCenters(selectOptions.costCenters);
+    }, [filters.company_id, selectOptions.costCenters]);
+
+
+    // --- HELPERS PARA LA TABLA Y MODAL (Mantenidos) ---
     const getCompanyName = (companyId) => {
+        if (!optionsLoaded) return '...';
         const company = selectOptions.companies.find(c => c.id === companyId);
         return company ? (company.name_company || company.name) : 'N/A';
     };
     
-    // 🚨 NUEVO: Obtener el nombre del Centro de Costo
     const getCostCenterName = (costCenterId) => {
+        if (!optionsLoaded) return '...';
         const cc = selectOptions.costCenters.find(c => c.id === costCenterId);
         return cc ? (cc.cost_center_name || cc.name) : 'N/A';
     };
 
-
-    const handleCreateClick = () => {
-        setEditingUser(null); 
-        setIsModalOpen(true);
+    const getPositionName = (positionId) => {
+        if (!optionsLoaded) return '...';
+        const position = selectOptions.positions.find(p => p.id === positionId);
+        return position ? (position.name_position || position.name) : 'N/A';
     };
 
-    const handleEditClick = (user) => {
+    // --- MANEJO DE EVENTOS (Mantenido) ---
+    const handleFilterChange = (e) => {
+        const { name, value } = e.target;
+        
+        const val = ['company_id', 'cost_center_id', 'position_id'].includes(name) 
+                    ? (value === '' ? '' : parseInt(value)) 
+                    : value;
+        
+        setFilters(prev => ({ ...prev, [name]: val }));
+    };
+    
+    const handleSearch = (e) => {
+        e.preventDefault();
+        fetchUsers(1, filters); 
+    };
+
+    const handleClearFilters = () => {
+        const defaultFilters = {
+            search: '', company_id: '', cost_center_id: '', position_id: '',
+        };
+        setFilters(defaultFilters);
+        fetchUsers(1, defaultFilters); 
+    }
+
+    const handleCreateClick = async () => {
+        setEditingUser(null); 
+        setIsModalOpen(true); 
+        await fetchSelectOptions();
+    };
+
+    const handleEditClick = async (user) => {
         setEditingUser(user);
         setIsModalOpen(true);
+        await fetchSelectOptions();
+    };
+    
+    // --- OPTIMIZACIÓN: Manejo del Modal de Detalle (Carga de datos al abrir) ---
+    const handleViewDetailsClick = async (user) => {
+        // 1. Mostrar el modal con los datos básicos y spinner
+        setViewingUserDetail(user); 
+        
+        try {
+            // 2. Cargar el usuario completo. Se ELIMINA el parámetro 'included' 
+            // y se confía en la carga ansiosa optimizada en UserController.php@show.
+            const response = await apiClient.get(`/users/${user.id}`); // <--- OPTIMIZACIÓN AQUÍ
+            const fullUserData = response.data; // Asume que el endpoint /users/{id} devuelve el objeto directamente
+            
+            // 3. Actualizar el estado con los datos completos
+            setViewingUserDetail(prev => ({
+                ...prev, 
+                ...fullUserData, 
+                // Asegurar que roles se mantiene o se actualiza si viene con la relación
+                roles: Array.isArray(fullUserData.roles) ? fullUserData.roles : (fullUserData.roles ? [{ name: fullUserData.roles[0] }] : user.roles)
+            }));
+            
+        } catch (err) {
+             // Manejo de Error 401 en el detalle
+            if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+                setError('Su sesión ha expirado. Redirigiendo al login...');
+                logOut();
+            } else {
+                 setError('Error al cargar los detalles completos del usuario.');
+            }
+            console.error(err);
+            setViewingUserDetail(null); // Cerrar el modal si hay un error
+        }
     };
 
-    const handleSave = (savedUser) => {
-        const userWithRoles = {
-             ...savedUser,
-             company_id: savedUser.company_id || (savedUser.company_id === 0 ? savedUser.company_id : selectOptions.companies[0]?.id),
-             roles: Array.isArray(savedUser.roles) ? savedUser.roles : (savedUser.roles ? [{ name: savedUser.roles[0] }] : [{ name: savedUser.role_name || 'Sin rol' }])
-        };
+    const handleCloseDetailsModal = () => {
+        setViewingUserDetail(null);
+    };
 
-        if (editingUser) {
-            setUsers(users.map(u => u.id === userWithRoles.id ? userWithRoles : u));
-        } else {
-            setUsers([userWithRoles, ...users]);
-        }
+    const handleSave = () => {
+        fetchUsers(paginationMeta?.current_page || 1, filters); 
         setEditingUser(null);
     };
     
     const handleDeleteClick = async (userId) => {
-        // 🚨 CONFIRMACIÓN EN ESPAÑOL
         if (!window.confirm("¿Estás seguro de que quieres eliminar este usuario?")) return;
 
         try {
             await apiClient.delete(`/users/${userId}`);
-            setUsers(users.filter(u => u.id !== userId));
+            fetchUsers(paginationMeta?.current_page || 1, filters); 
         } catch (err) {
-            // 🚨 MENSAJE DE ERROR EN ESPAÑOL
-            setError('Error al eliminar el usuario. Es posible que tenga registros asociados.');
+            if (err.response && (err.response.status === 401 || err.response.status === 403)) {
+                setError('Su sesión ha expirado. Redirigiendo al login...');
+                logOut();
+            } else {
+                setError('Error al eliminar el usuario. Es posible que tenga registros asociados.');
+            }
             console.error(err);
         }
+    };
+
+    const handlePageChange = (page) => {
+        fetchUsers(page, filters);
     };
 
 
     return (
         <AuthenticatedLayout title="Gestión de Usuarios">
             <div className="p-8">
-                {/* Cabecera con botón de crear */}
                 <div className="flex justify-between items-center mb-6">
                     <p className="text-gray-600">Listado general de usuarios del sistema.</p>
-                    {/* BOTÓN NUEVO USUARIO CON COLOR CORPORATIVO */}
                     <button 
                         onClick={handleCreateClick}
                         className="flex items-center px-4 py-2 text-white rounded-lg transition shadow-md"
-                        style={{ backgroundColor: PRIMARY_COLOR, transition: 'background-color 0.2s' }}
+                        style={{ backgroundColor: PRIMARY_COLOR }}
                         onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(5, 25, 49, 0.9)'}
                         onMouseOut={e => e.currentTarget.style.backgroundColor = PRIMARY_COLOR}
                     >
@@ -609,104 +733,192 @@ export default function Users() {
                     </button>
                 </div>
 
-                {/* Manejo de Estados de Carga/Error */}
-                {(loading || optionsLoading) && <div className="text-center py-10" style={{ color: PRIMARY_COLOR }}>Cargando datos del sistema...</div>}
-                
-                {/* 🚨 ERROR LLAMATIVO */}
-                {error && <div className={ERROR_CLASS_MAIN}>🚨 ¡Error! {error}</div>}
+                {/* --- SECCIÓN DE FILTROS (Mantenida) --- */}
+                <div className="bg-white p-6 rounded-xl shadow-md mb-6 border border-gray-200">
+                    <h3 className="text-xl font-bold mb-4 flex items-center" style={{ color: PRIMARY_COLOR }}>
+                        <FunnelIcon className="w-6 h-6 mr-2" />
+                        Filtros de Búsqueda
+                    </h3>
+                    <form onSubmit={handleSearch}>
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700">Buscar (Nombre/Apellido)</label>
+                                <div className="mt-1 relative rounded-md shadow-sm">
+                                    <input 
+                                        type="text" 
+                                        name="search" 
+                                        value={filters.search} 
+                                        onChange={handleFilterChange} 
+                                        className="w-full p-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                        placeholder="Escribe nombre o apellido..." 
+                                    />
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Empresa</label>
+                                <select 
+                                    name="company_id" 
+                                    value={filters.company_id} 
+                                    onChange={handleFilterChange} 
+                                    className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white"
+                                >
+                                    <option value="">Todas las Empresas</option> 
+                                    {selectOptions.companies.map(item => (<option key={item.id} value={item.id}>{item.name_company || item.name}</option>))}
+                                </select>
+                            </div>
 
-                {/* Tabla */}
-                {!(loading || optionsLoading) && !error && (
-                    <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        {/* ENCABEZADOS DE TABLA CON COLOR DE ACENTO */}
-                                        <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Nombre</th>
-                                        <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Email</th>
-                                        <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Empresa</th>
-                                        <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>C. Costo</th> {/* 🚨 NUEVA COLUMNA */}
-                                        <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Roles</th>
-                                        <th className={`px-6 py-3 text-right text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {users.length > 0 ? (
-                                        users.map((user) => (
-                                            <tr key={user.id} className="hover:bg-gray-50 transition">
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex items-center">
-                                                        {/* AVATAR CON COLOR DE ACENTO */}
-                                                        <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold" style={{ backgroundColor: 'rgba(5, 25, 49, 0.1)', color: PRIMARY_COLOR }}>
-                                                            {(user.name || user.name_user || 'U').charAt(0).toUpperCase()}
-                                                        </div>
-                                                        <div className="ml-4">
-                                                            <div className="text-sm font-medium text-gray-900">
-                                                                {user.name || user.name_user}
-                                                                {user.last_name_user && <span className="text-gray-500 ml-1">({user.last_name_user})</span>}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-500">{user.email}</div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm text-gray-900">
-                                                        {getCompanyName(user.company_id)}
-                                                    </div>
-                                                </td>
-                                                {/* 🚨 NUEVA CELDA para Centro de Costo */}
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    {/* SOLUCIÓN: Primero intenta usar el objeto cost_center cargado por la relación, si no, lo busca por ID. */}
-                                                    <div className="text-sm text-gray-900">
-                                                        {user.cost_center?.cost_center_name || user.cost_center?.name || getCostCenterName(user.cost_center_id)}
-                                                    </div>
-                                                </td>
-                                                {/* Fin de NUEVA CELDA */}
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {user.roles && user.roles.length > 0 ? (
-                                                            user.roles.map((role, index) => (
-                                                                <span key={index} className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                                                    {role.name || role}
-                                                                </span>
-                                                            ))
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400">Sin rol</span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                    {/* BOTÓN EDITAR CON COLOR CORPORATIVO */}
-                                                    <button 
-                                                        onClick={() => handleEditClick(user)}
-                                                        className="hover:text-gray-900 mr-3"
-                                                        style={{ color: PRIMARY_COLOR }}
-                                                    >
-                                                        <PencilIcon className="w-5 h-5" />
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => handleDeleteClick(user.id)}
-                                                        className="text-red-600 hover:text-red-900"
-                                                    >
-                                                        <TrashIcon className="w-5 h-5" />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        <tr>
-                                            <td colSpan="6" className="px-6 py-4 text-center text-gray-500">
-                                                No se encontraron usuarios.
-                                            </td>
-                                        </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Centro de Costo</label>
+                                <select 
+                                    name="cost_center_id" 
+                                    value={filters.cost_center_id} 
+                                    onChange={handleFilterChange} 
+                                    className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white"
+                                >
+                                    <option value="">Todos los C. Costo</option>
+                                    {selectOptions.costCenters.map(item => (<option key={item.id} value={item.id}>{item.cost_center_name || item.name}</option>))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Posición</label>
+                                <select 
+                                    name="position_id" 
+                                    value={filters.position_id} 
+                                    onChange={handleFilterChange} 
+                                    className="mt-1 w-full p-2 border border-gray-300 rounded-md bg-white"
+                                >
+                                    <option value="">Todas las Posiciones</option>
+                                    {selectOptions.positions.map(item => (<option key={item.id} value={item.id}>{item.name_position || item.name}</option>))}
+                                </select>
+                            </div>
                         </div>
-                    </div>
+
+                        <div className="flex justify-end space-x-3 mt-4 pt-4 border-t border-gray-100">
+                            <button 
+                                type="button" 
+                                onClick={handleClearFilters}
+                                className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 transition"
+                            >
+                                <ArrowPathIcon className="w-5 h-5 mr-2" />
+                                Limpiar Filtros
+                            </button>
+                            <button 
+                                type="submit"
+                                disabled={loading}
+                                className="flex items-center px-4 py-2 text-white rounded-md shadow-sm text-sm font-medium transition disabled:opacity-50"
+                                style={{ backgroundColor: PRIMARY_COLOR }}
+                                onMouseOver={e => e.currentTarget.style.backgroundColor = 'rgba(5, 25, 49, 0.9)'}
+                                onMouseOut={e => e.currentTarget.style.backgroundColor = PRIMARY_COLOR}
+                            >
+                                <MagnifyingGlassIcon className="w-5 h-5 mr-2" />
+                                {loading ? 'Buscando...' : 'Buscar'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                {/* --- FIN SECCIÓN DE FILTROS --- */}
+
+                {loading && !users.length ? (
+                    <div className="text-center py-10" style={{ color: PRIMARY_COLOR }}>Cargando datos del sistema...</div>
+                ) : (
+                    <>
+                        {error && <div className={ERROR_CLASS_MAIN}>🚨 ¡Error! {error}</div>}
+
+                        {!error && (
+                            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        {/* --- ENCABEZADOS DE TABLA ACTUALIZADOS --- */}
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Nombre</th>
+                                                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Email</th>
+                                                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Cargo/Puesto</th>
+                                                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Rol</th>
+                                                <th className={`px-6 py-3 text-right text-xs font-medium uppercase tracking-wider`} style={{ color: PRIMARY_COLOR }}>Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {users.length > 0 ? (
+                                                users.map((user) => (
+                                                    <tr key={user.id} className="hover:bg-gray-50 transition">
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="flex items-center">
+                                                                <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold" style={{ backgroundColor: 'rgba(5, 25, 49, 0.1)', color: PRIMARY_COLOR }}>
+                                                                    {(user.name || user.name_user || 'U').charAt(0).toUpperCase()}
+                                                                </div>
+                                                                <div className="ml-4">
+                                                                    <div className="text-sm font-medium text-gray-900">
+                                                                        {user.name || user.name_user}
+                                                                        {user.last_name_user && <span className="text-gray-500 ml-1">({user.last_name_user})</span>} 
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-sm text-gray-500">{user.email}</div>
+                                                        </td>
+                                                        {/* --- CAMPO CARGO/PUESTO (Usamos la relación 'position' cargada por la optimización) --- */}
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="text-sm text-gray-900">
+                                                                {user.position?.name_position || user.position?.name || getPositionName(user.position_id)}
+                                                            </div>
+                                                        </td>
+                                                        {/* --- CAMPO ROL (Principal) --- */}
+                                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {user.roles && user.roles.length > 0 ? (
+                                                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                                                        {user.roles[0].name || user.roles[0]}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-xs text-gray-400">Sin rol</span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium flex justify-end space-x-3">
+                                                            {/* --- BOTÓN VER MÁS --- */}
+                                                            <button 
+                                                                onClick={() => handleViewDetailsClick(user)}
+                                                                className="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                                                            >
+                                                                Ver Más
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleEditClick(user)}
+                                                                className="hover:text-gray-900"
+                                                                style={{ color: PRIMARY_COLOR }}
+                                                            >
+                                                                <PencilIcon className="w-5 h-5" />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => handleDeleteClick(user.id)}
+                                                                className="text-red-600 hover:text-red-900"
+                                                            >
+                                                                <TrashIcon className="w-5 h-5" />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr>
+                                                    <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
+                                                        No se encontraron usuarios con los filtros aplicados.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <Pagination meta={paginationMeta} onPageChange={handlePageChange} />
+                            </div>
+                        )}
+                    </>
                 )}
                 
                 {/* Modal de Formulario */}
@@ -716,6 +928,17 @@ export default function Users() {
                     userToEdit={editingUser}
                     onSave={handleSave}
                     selectOptions={selectOptions}
+                    isLoadingOptions={optionsLoading} 
+                />
+                
+                {/* Modal de Detalle de Usuario */}
+                <UserDetailsModal
+                    isOpen={!!viewingUserDetail}
+                    onClose={handleCloseDetailsModal}
+                    user={viewingUserDetail}
+                    getCompanyName={getCompanyName}
+                    getCostCenterName={getCostCenterName}
+                    getPositionName={getPositionName}
                 />
             </div>
         </AuthenticatedLayout>
