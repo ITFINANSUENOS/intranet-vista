@@ -21,50 +21,6 @@ const BG_PRIMARY_DARK = 'bg-[rgb(5,25,49)]';
 
 const getBaseUrl = (apiClient) => apiClient.defaults.baseURL ? apiClient.defaults.baseURL.replace('/api', '') : 'http://localhost:8000';
 
-// --- SUB-COMPONENTE CAROUSEL ---
-const NewsCarousel = ({ newsList = [], IMAGE_BASE_URL }) => {
-    const [currentIndex, setCurrentIndex] = useState(0);
-    const nextSlide = () => setCurrentIndex((prevIndex) => (prevIndex === newsList.length - 1 ? 0 : prevIndex + 1));
-    const prevSlide = () => setCurrentIndex((prevIndex) => (prevIndex === 0 ? newsList.length - 1 : prevIndex - 1));
-
-    useEffect(() => {
-        if (newsList.length > 1) {
-            const interval = setInterval(nextSlide, 5000);
-            return () => clearInterval(interval);
-        }
-    }, [newsList.length]);
-
-    if (newsList.length === 0) return <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-gray-300 text-center text-gray-500 italic h-[450px] flex items-center justify-center">No hay noticias.</div>;
-    
-    const getImageUrl = (path) => {
-        const normalizedPath = path?.startsWith('public/') ? path.replace('public/', 'storage/') : path;
-        return `${IMAGE_BASE_URL}/${normalizedPath}`;
-    };
-
-    return (
-        <motion.div className="relative w-full overflow-hidden rounded-xl shadow-xl border border-gray-200 h-[450px]">
-            <div className="flex transition-transform duration-500 h-full" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
-                {newsList.map((news, index) => (
-                    <div key={news.id || index} className="w-full flex-shrink-0 relative h-full" style={{ backgroundImage: `url(${getImageUrl(news.image_path)})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-                        <div className="absolute inset-0 bg-black bg-opacity-30 flex items-end">
-                            <div className="p-8 w-full bg-gradient-to-t from-black/90 via-black/40 to-transparent">
-                                <h3 className="text-3xl font-bold text-white mb-2 leading-snug">{news.title}</h3>
-                                <p className="text-sm text-gray-200 line-clamp-2 max-w-2xl">{news.description}</p>
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-            {newsList.length > 1 && (
-                <>
-                    <button onClick={prevSlide} className="absolute top-1/2 left-4 transform -translate-y-1/2 bg-white/20 hover:bg-white/40 backdrop-blur-md p-3 rounded-full text-white transition-all"><ChevronLeftIcon className="w-6 h-6"/></button>
-                    <button onClick={nextSlide} className="absolute top-1/2 right-4 transform -translate-y-1/2 bg-white/20 hover:bg-white/40 backdrop-blur-md p-3 rounded-full text-white transition-all"><ChevronRightIcon className="w-6 h-6"/></button>
-                </>
-            )}
-        </motion.div>
-    );
-};
-
 // --- COMPONENTE PRINCIPAL ---
 export default function Dashboard() {
     const { apiClient, user } = useAuth();
@@ -163,22 +119,9 @@ export default function Dashboard() {
                         </motion.div>
                     </div>
 
-                    {/* MÉTRICAS RÁPIDAS */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                         <MetricCard title="Usuarios" value="24" Icon={UsersIcon} color="blue" />
-                         <MetricCard title="Empresas" value="8" Icon={BriefcaseIcon} color="blue" />
-                         <MetricCard title="Eventos Activos" value={eventsList.length} Icon={ClipboardDocumentListIcon} color="blue" />
-                         <MetricCard title="Objetivos" value={objectivesList.length} Icon={LightBulbIcon} color="red" />
-                    </div>
+                    
 
-                    {/* CARRUSEL DE NOTICIAS */}
-                    <div className="mb-14">
-                        <div className="flex items-center gap-3 mb-6">
-                            <h2 className="text-2xl font-black text-gray-800 uppercase tracking-tight">Noticias</h2>
-                            <div className="flex-1 h-px bg-gray-200"></div>
-                        </div>
-                        <NewsCarousel newsList={newsList} IMAGE_BASE_URL={IMAGE_BASE_URL} />
-                    </div>
+                    
 
                     {/* SECCIÓN: OBJETIVOS Y EVENTOS */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
@@ -224,15 +167,5 @@ export default function Dashboard() {
     );
 }
 
-// Sub-componente para métricas
-const MetricCard = ({ title, value, Icon, color }) => (
-    <div className={`bg-white p-6 rounded-3xl shadow-sm border border-gray-100 border-l-4 ${color === 'red' ? 'border-l-red-500' : 'border-l-[rgb(5,25,49)]'} transition-all hover:shadow-md`}>
-        <div className="flex justify-between items-center mb-2">
-            <p className="text-xs font-bold uppercase tracking-widest text-gray-400">{title}</p>
-            <div className={`p-2 rounded-xl ${color === 'red' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-900'}`}>
-                <Icon className="w-5 h-5"/>
-            </div>
-        </div>
-        <p className="text-3xl font-black text-gray-800">{value}</p>
-    </div>
-);
+
+

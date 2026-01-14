@@ -30,7 +30,7 @@ function App() {
       <AuthProvider>
         <Routes>
           {/* Rutas Públicas */}
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
 
           {/* Rutas Protegidas por Login */}

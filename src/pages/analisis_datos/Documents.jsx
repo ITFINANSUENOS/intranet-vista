@@ -1,37 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import AuthenticatedLayout from '../../layouts/AuthenticatedLayout';
 import { useAuth } from '../../context/AuthContext';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-    AreaChart, Area, PieChart, Pie, Cell
+    PieChart, Pie, Cell, Label
 } from 'recharts';
 import { 
-    FilePieChart, Loader2, LayoutDashboard, RefreshCw, TrendingUp
+    RefreshCw, CheckCircle2, Activity, UploadCloud, AlertTriangle, FilePieChart
 } from 'lucide-react';
 
-// --- CONFIGURACIÓN ---
-const COLORS = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#94a3b8'];
+// --- CONFIGURACIÓN DE COLORES ---
+const COLOR_MAP = {
+    '1 A 30': '#818cf8', '31 A 90': '#f59e0b', '91 A 180': '#ef4444', 
+    '181 A 360': '#10b981', 'AL DIA': '#22d3ee', 'MAS DE 360': '#6366f1', 
+    'CON GESTIÓN': '#10b981', 'SIN GESTIÓN': '#6366f1', 'EMPEORO': '#ef4444', 
+    'MEJORO': '#22d3ee', 'IGUAL': '#f59e0b', 'PAGO': '#10b981', 'SIN PAGO': '#94a3b8',
+    'ANTICIPADO': '#10b981', 'VIGENCIA EXPIRADA': '#6366f1', 'VIGENTES': '#f43f5e',
+    'CALL CENTER': '#8b5cf6', 'ASESOR': '#ec4899', 'GESTOR': '#f59e0b',
+    'NORMALIZO': '#10b981', 'MANTUVO': '#f59e0b', 'PAGOS PENDIENTES POR CRUZAR': '#8b5cf6'
+};
+const DEFAULT_COLORS = ['#6366f1', '#f43f5e', '#10b981', '#f59e0b', '#06b6d4', '#8b5cf6', '#ec4899'];
 
-const formatCurrency = (val) => 
-    new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
-
-const formatNumber = (val) => 
-    new Intl.NumberFormat('es-CO').format(val);
-
-// Tooltip Personalizado Estético
-const CustomTooltip = ({ active, payload, label, isCurrency = false }) => {
+// --- TOOLTIP CORREGIDO PARA BARRAS Y DONAS ---
+const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
         return (
-            <div className="bg-slate-900/95 p-4 rounded-xl border border-slate-700 text-white shadow-2xl backdrop-blur-sm">
-                <p className="font-bold mb-2 border-b border-slate-700 pb-1 text-[10px] uppercase tracking-widest text-indigo-400">{label}</p>
-                {payload.map((entry, index) => (
-                    <div key={index} className="flex justify-between gap-6 text-[11px] mb-1">
-                        <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                            <span className="text-slate-300">{entry.name}:</span>
-                        </div>
-                        <span className="font-mono font-bold">
-                            {isCurrency ? formatCurrency(entry.value) : formatNumber(entry.value)}
+            <div className="bg-white p-4 shadow-2xl rounded-2xl border border-slate-100 min-w-[200px] z-50">
+                <p className="text-[11px] font-black text-slate-800 mb-2 uppercase border-b pb-1">
+                    {label || payload[0].payload.name || payload[0].name}
+                </p>
+                {payload.map((item, index) => (
+                    <div key={index} className="flex justify-between items-center gap-4 py-1">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">
+                            {item.name}:
+                        </span>
+                        <span className="text-[11px] font-black text-slate-900">
+                            {Number(item.value || 0).toLocaleString()}
                         </span>
                     </div>
                 ))}
@@ -42,243 +46,348 @@ const CustomTooltip = ({ active, payload, label, isCurrency = false }) => {
 };
 
 export default function Documents() {
-    const { apiClient } = useAuth(); 
+    const { apiClient } = useAuth();
+    const [activeTab, setActiveTab] = useState('cartera'); 
     const [loading, setLoading] = useState(false);
-    const [uploading, setUploading] = useState(false);
-    const [reportData, setReportData] = useState(null);
-
-    // --- TRANSFORMADORES DE DATOS ---
+    const [isUploading, setIsUploading] = useState(false); 
+    const [uploadProgress, setUploadProgress] = useState(0); 
+    const [selectedJobId, setSelectedJobId] = useState(null);
+    const [moduleData, setModuleData] = useState({ cartera: null, seguimientos: null });
+    const [notification, setNotification] = useState(null);
     
-    // 1. Regional y Cobro (Apilados)
-    const getStackedData = (raw, mainKey, subKey) => {
-        if (!Array.isArray(raw)) return { data: [], segments: [] };
-        const map = {};
-        const segments = new Set();
+    // Estados para drilldown
+    const [vigenciaSelection, setVigenciaSelection] = useState(null); 
+    const [gestionSelection, setGestionSelection] = useState(null);
+    const [pagoSelection, setPagoSelection] = useState(null);
+    const [sinPagoSelection, setSinPagoSelection] = useState(null);
 
-        raw.forEach(item => {
-            const group = item[mainKey] || 'OTRO';
-            const sub = item[subKey] || 'N/A';
-            const val = parseFloat(item.len) || 0;
+    const fileInputRef = useRef(null);
 
-            if (!map[group]) map[group] = { name: group };
-            map[group][sub] = (map[group][sub] || 0) + val;
-            segments.add(sub);
-        });
-
-        return { 
-            data: Object.values(map), 
-            segments: Array.from(segments) 
-        };
-    };
-
-    // 2. Desembolso (Líneas/Área por Año)
-    const getLineData = (raw) => {
-        if (!Array.isArray(raw)) return [];
-        const map = {};
-        raw.forEach(item => {
-            const year = item.Año_Desembolso;
-            const val = parseFloat(item.Valor_Desembolso) || 0;
-            map[year] = (map[year] || 0) + val;
-        });
-        return Object.entries(map)
-            .map(([year, valor]) => ({ year, valor }))
-            .sort((a, b) => a.year - b.year);
-    };
-
-    // 3. Vigencia (Pastel)
-    const getPieData = (raw) => {
-        if (!Array.isArray(raw)) return [];
-        const map = {};
-        raw.forEach(item => {
-            const status = item.Estado_Padre || 'S/N';
-            map[status] = (map[status] || 0) + (parseFloat(item.len) || 0);
-        });
-        return Object.entries(map).map(([name, value]) => ({ name, value }));
-    };
-
-    // --- ACCIONES ---
-
-    const fetchAnalytics = async (key) => {
+    const fetchWalletData = useCallback(async (jobId) => {
+        if (!jobId) return;
         setLoading(true);
         try {
-            // Se envía el file_key como parámetro de consulta según requiere WalletController
-            const response = await apiClient.get(`/wallet/dashboard-principal`, { params: { file_key: key } });
-            console.log("Datos recibidos:", response.data);
-            setReportData(response.data?.data || response.data);
-        } catch (e) {
-            console.error("Error al obtener dashboard:", e);
+            const [resCartera, resSeguimientos] = await Promise.all([
+                apiClient.get(`/wallet/init/cartera?job_id=${jobId}`),
+                apiClient.get(`/wallet/init/seguimientos?job_id=${jobId}`)
+            ]);
+            setModuleData({
+                cartera: resCartera?.data?.data?.data || null,
+                seguimientos: resSeguimientos?.data?.data?.data || null
+            });
+            setSelectedJobId(jobId);
+        } catch (error) {
+            setNotification({ type: 'error', message: 'Error al cargar datos' });
         } finally {
             setLoading(false);
         }
+    }, [apiClient]);
+
+    const waitForProcessAndRedirect = async (newJobId) => {
+        const interval = setInterval(async () => {
+            try {
+                const { data } = await apiClient.get('/reportes/activo');
+                const serverId = data.active_job_id || data.job_id;
+                if (serverId === newJobId) {
+                    clearInterval(interval);
+                    await fetchWalletData(newJobId);
+                    setIsUploading(false);
+                    setUploadProgress(0);
+                    setNotification({ type: 'success', message: 'Datos actualizados correctamente' });
+                }
+            } catch (e) { console.warn("Procesando..."); }
+        }, 3000);
     };
 
-    const handleFileUpload = async (e) => {
-        const file = e.target.files[0];
+    const handleFileUpload = async (event) => {
+        const file = event.target.files[0];
         if (!file) return;
-
-        const formData = new FormData();
-        formData.append('file', file); // El nombre 'file' coincide con la validación en Laravel
-
-        setUploading(true);
+        setIsUploading(true);
         try {
-            // El endpoint coincide con api.php
-            const res = await apiClient.post('/reportes/cargar-general', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+            const { data: signRes } = await apiClient.post('/reportes/generar-url', {
+                filename: file.name,
+                content_type: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             });
-            
-            const data = res.data?.data || res.data;
-            // Si el servicio devuelve archivos_generados, tomamos el primer key
-            if (data.archivos_generados) {
-                const keys = Object.values(data.archivos_generados);
-                if (keys.length > 0) fetchAnalytics(keys[0]);
-            }
-        } catch (e) {
-            alert("Error al procesar el archivo. Verifique el formato.");
-            console.error(e);
-        } finally {
-            setUploading(false);
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', signRes.upload_url);
+            xhr.upload.onprogress = (e) => setUploadProgress(Math.round((e.loaded / e.total) * 70) + 10);
+            xhr.onload = async () => {
+                if (xhr.status === 200) {
+                    const { data: procRes } = await apiClient.post('/reportes/iniciar-procesamiento', {
+                        file_key: signRes.file_key,
+                        empresa: 'FINANSUENOS'
+                    });
+                    waitForProcessAndRedirect(procRes.job_id);
+                }
+            };
+            xhr.send(file);
+        } catch (error) {
+            setIsUploading(false);
+            setNotification({ type: 'error', message: 'Error en la subida' });
         }
     };
 
+    useEffect(() => {
+        apiClient.get('/reportes/activo').then(({ data }) => {
+            const id = data?.active_job_id || data?.job_id;
+            if (id) fetchWalletData(id);
+        });
+    }, [apiClient, fetchWalletData]);
+
+    const charts = useMemo(() => {
+        try {
+            const raw = moduleData[activeTab];
+            if (!raw) return null;
+
+            const processGeneric = (list, xKey, stackKey, valKey) => {
+                const items = Array.isArray(list) ? list : (list?.grouped || []);
+                const map = {}; const keysSet = new Set();
+                items.forEach(d => {
+                    const xVal = d[xKey] || 'N/A';
+                    const sKey = String(d[stackKey] || 'OTROS').toUpperCase();
+                    const val = Number(d[valKey] || d['count'] || d['Cantidad'] || 0);
+                    if (!map[xVal]) map[xVal] = { name: xVal };
+                    map[xVal][sKey] = (map[xVal][sKey] || 0) + val;
+                    keysSet.add(sKey);
+                });
+                return { data: Object.values(map), keys: Array.from(keysSet) };
+            };
+
+            const buildDrilldown = (list, mainKey, subKey, valKey) => {
+                const items = Array.isArray(list) ? list : (list?.grouped || []);
+                const total = items.reduce((sum, item) => sum + Number(item[valKey] || 0), 0);
+                const grouped = items.reduce((acc, item) => {
+                    const main = String(item[mainKey] || 'SIN DATO').toUpperCase();
+                    const sub = String(item[subKey] || 'OTROS').toUpperCase();
+                    const val = Number(item[valKey] || 0);
+                    if (!acc[main]) acc[main] = { name: main, value: 0, children: {} };
+                    acc[main].value += val;
+                    acc[main].children[sub] = (acc[main].children[sub] || 0) + val;
+                    return acc;
+                }, {});
+
+                return Object.values(grouped).map(m => ({
+                    name: m.name,
+                    value: m.value,
+                    percentage: total > 0 ? ((m.value / total) * 100).toFixed(1) : "0",
+                    children: Object.entries(m.children).map(([name, val]) => ({
+                        name, 
+                        value: val, 
+                        percentage: m.value > 0 ? ((val / m.value) * 100).toFixed(1) : "0"
+                    }))
+                }));
+            };
+
+            if (activeTab === 'cartera') {
+                const desembolsoMap = (raw?.cubo_desembolso || []).reduce((acc, d) => {
+                    const anio = String(d.Año_Desembolso || d.Anio_Desembolso || 'N/A');
+                    if (!acc[anio]) acc[anio] = { name: anio, "VALOR DESEMBOLSO": 0 };
+                    acc[anio]["VALOR DESEMBOLSO"] += Number(d.Valor_Desembolso || 0);
+                    return acc;
+                }, {});
+
+                return {
+                    regional: processGeneric(raw?.cubo_regional, 'Regional_Venta', 'Franja_Meta', 'count'),
+                    cobro: processGeneric(raw?.cubo_cobro, 'Eje_X_Cobro', 'Franja_Meta', 'count'),
+                    desembolso: { data: Object.values(desembolsoMap), keys: ["VALOR DESEMBOLSO"] },
+                    vigencia: buildDrilldown(raw?.cubo_vigencia, 'Estado_Vigencia_Agrupado', 'Sub_Estado_Vigencia', 'count')
+                };
+            } else {
+                const recaudoItems = raw?.donut_data || [];
+                const recaudoTotal = recaudoItems.reduce((a, b) => a + Number(b.count || 0), 0);
+                const recaudoBase = recaudoItems.reduce((acc, item) => {
+                    const estado = String(item.Estado_Pago || 'SIN PAGO').toUpperCase();
+                    acc[estado] = (acc[estado] || 0) + Number(item.count || 0);
+                    return acc;
+                }, {});
+
+                // Priorizamos el uso de detalle_pago/detalle_sin_pago para los drilldowns
+                const detailData = raw?.detalle_pago?.grouped || raw?.detalle_pago || [];
+                const detailSinPago = raw?.detalle_sin_pago?.grouped || raw?.detalle_sin_pago || [];
+
+                return {
+                    recaudo: Object.entries(recaudoBase).map(([name, value]) => ({
+                        name, value, percentage: recaudoTotal > 0 ? ((value / recaudoTotal) * 100).toFixed(1) : "0"
+                    })),
+                    recaudoTotal,
+                    gestion: buildDrilldown(raw?.sunburst_grouped, 'Estado_Gestion', 'Cargo_Usuario', 'Cantidad'),
+                    conPago: buildDrilldown(detailData.filter(d => d.Estado_Pago !== 'SIN PAGO'), 'Estado_Gestion', 'Cargo_Usuario', 'Cantidad'),
+                    sinPago: buildDrilldown(detailSinPago, 'Estado_Gestion', 'Cargo_Usuario', 'Cantidad')
+                };
+            }
+        } catch (err) {
+            console.error("Error procesando charts:", err);
+            return null;
+        }
+    }, [moduleData, activeTab]);
+
     return (
-        <AuthenticatedLayout title="Monitor Estratégico">
-            <div className="min-h-screen bg-[#F8FAFC] p-4 md:p-8">
-                <div className="max-w-7xl mx-auto space-y-8">
-                    
-                    {/* Header */}
-                    <header className="bg-white p-6 rounded-3xl shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 border border-slate-200">
-                        <div className="flex items-center gap-4">
-                            <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-200">
-                                <LayoutDashboard className="text-white" />
-                            </div>
-                            <div>
-                                <h1 className="text-xl font-black text-slate-800 uppercase tracking-tight">Análisis de Cartera</h1>
-                                <p className="text-xs text-slate-400 font-medium italic">Gestión operativa de ventas y cobros</p>
-                            </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                            <button 
-                                onClick={() => document.getElementById('file-up').click()}
-                                className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-all shadow-lg text-sm"
-                                disabled={uploading || loading}
-                            >
-                                <RefreshCw size={16} className={uploading ? "animate-spin" : ""} />
-                                {uploading ? 'PROCESANDO...' : 'ACTUALIZAR DATOS'}
-                            </button>
-                            <input id="file-up" type="file" className="hidden" onChange={handleFileUpload} accept=".xlsx,.xls" />
-                        </div>
-                    </header>
+        <AuthenticatedLayout title="Seguimiento de Cartera">
+            <div className="min-h-screen bg-slate-50 p-6">
+                
+                {notification && (
+                    <div className="fixed top-6 right-6 z-50 flex items-center gap-3 bg-white border border-slate-200 p-4 rounded-2xl shadow-xl">
+                        <CheckCircle2 className="text-emerald-500" size={20} />
+                        <span className="text-[10px] font-black uppercase text-slate-700">{notification.message}</span>
+                    </div>
+                )}
 
-                    {loading ? (
-                        <div className="h-96 flex flex-col items-center justify-center bg-white rounded-3xl border border-slate-100 shadow-sm">
-                            <Loader2 className="animate-spin text-indigo-500 mb-4" size={48} />
-                            <p className="text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">Generando métricas...</p>
+                <header className="bg-white p-4 rounded-[2rem] shadow-sm flex flex-wrap justify-between items-center gap-4 mb-8">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg"><Activity size={20}/></div>
+                        <div>
+                            <h1 className="text-sm font-black uppercase text-slate-800">Panel de Control</h1>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">ID ACTIVO: {selectedJobId || 'PENDIENTE'}</p>
                         </div>
-                    ) : reportData ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                            
-                            {/* REGIONAL (Stacked Bar) */}
-                            <ChartCard title="Regional de Venta" desc="Distribución por Regional y Franja Meta">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={getStackedData(reportData.regional, 'Regional_Venta', 'Franja_Meta').data} margin={{ bottom: 30 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="name" angle={-30} textAnchor="end" interval={0} tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} />
-                                        <YAxis tick={{fontSize: 10, fill: '#94a3b8'}} />
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <Legend iconType="circle" wrapperStyle={{paddingTop: 20}} />
-                                        {getStackedData(reportData.regional, 'Regional_Venta', 'Franja_Meta').segments.map((s, i) => (
-                                            <Bar key={s} dataKey={s} stackId="a" fill={COLORS[i % COLORS.length]} radius={i === 0 ? [0,0,0,0] : [4,4,0,0]} />
-                                        ))}
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </ChartCard>
+                    </div>
 
-                            {/* COBRO (Stacked Bar) */}
-                            <ChartCard title="Gestión de Cobro" desc="Eje de Cobro por Franja Meta">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={getStackedData(reportData.cobro, 'Eje_X_Cobro', 'Franja_Meta').data} margin={{ bottom: 30 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="name" angle={-30} textAnchor="end" interval={0} tick={{fontSize: 10, fontWeight: 700, fill: '#64748b'}} />
-                                        <YAxis tick={{fontSize: 10, fill: '#94a3b8'}} />
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <Legend iconType="circle" wrapperStyle={{paddingTop: 20}} />
-                                        {getStackedData(reportData.cobro, 'Eje_X_Cobro', 'Franja_Meta').segments.map((s, i) => (
-                                            <Bar key={s} dataKey={s} stackId="a" fill={COLORS[i % COLORS.length]} />
-                                        ))}
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </ChartCard>
-
-                            {/* DESEMBOLSO (Area/Line) */}
-                            <ChartCard title="Valor Desembolsado" desc="Evolución histórica por año (COP)">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={getLineData(reportData.desembolso)}>
-                                        <defs>
-                                            <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
-                                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="year" tick={{fontSize: 12, fontWeight: 800, fill: '#475569'}} axisLine={false} />
-                                        <YAxis tickFormatter={(v) => `$${(v/1e6).toFixed(0)}M`} tick={{fontSize: 10, fill: '#94a3b8'}} axisLine={false} />
-                                        <Tooltip content={<CustomTooltip isCurrency={true} />} />
-                                        <Area type="monotone" dataKey="valor" stroke="#6366f1" strokeWidth={4} fill="url(#colorArea)" />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </ChartCard>
-
-                            {/* VIGENCIA (Pie) */}
-                            <ChartCard title="Estado de Vigencia" desc="Composición de cartera vigentes vs otros">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={getPieData(reportData.vigencia)}
-                                            innerRadius={70}
-                                            outerRadius={110}
-                                            paddingAngle={8}
-                                            dataKey="value"
-                                        >
-                                            {getPieData(reportData.vigencia).map((_, i) => (
-                                                <Cell key={i} fill={COLORS[i % COLORS.length]} strokeWidth={0} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip content={<CustomTooltip />} />
-                                        <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </ChartCard>
-
+                    <div className="flex items-center gap-4">
+                        <div className="flex bg-slate-100 p-1 rounded-xl">
+                            {['cartera', 'seguimientos'].map(tab => (
+                                <button key={tab} onClick={() => { 
+                                    setActiveTab(tab); 
+                                    setVigenciaSelection(null);
+                                    setGestionSelection(null);
+                                    setPagoSelection(null);
+                                    setSinPagoSelection(null);
+                                }}
+                                    className={`px-6 py-2 rounded-lg text-[10px] font-black transition-all ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
+                                    {tab.toUpperCase()}
+                                </button>
+                            ))}
                         </div>
-                    ) : (
-                        <div className="h-96 border-2 border-dashed border-slate-200 rounded-[40px] flex flex-col items-center justify-center text-slate-400 bg-white/50 backdrop-blur-sm">
-                            <div className="bg-slate-100 p-6 rounded-full mb-4">
-                                <FilePieChart size={48} className="text-slate-300" />
-                            </div>
-                            <h3 className="font-black uppercase tracking-[0.2em] text-sm text-slate-500">Sin datos disponibles</h3>
-                            <p className="text-xs mt-2 font-medium">Por favor, cargue un archivo Excel para iniciar el análisis</p>
-                        </div>
-                    )}
-                </div>
+                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+                        <button onClick={() => fileInputRef.current.click()} disabled={isUploading}
+                            className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-black flex items-center gap-2 hover:bg-indigo-700 disabled:bg-slate-300">
+                            {isUploading ? <RefreshCw className="animate-spin" size={14}/> : <UploadCloud size={14}/>}
+                            {isUploading ? `SUBIENDO ${uploadProgress}%` : 'CARGAR REPORTE'}
+                        </button>
+                    </div>
+                </header>
+
+                {loading ? (
+                    <div className="h-[60vh] flex flex-col items-center justify-center bg-white rounded-[3rem] shadow-sm">
+                        <div className="w-14 h-14 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-6" />
+                        <p className="text-[11px] font-black text-slate-500 uppercase">Sincronizando gráficas...</p>
+                    </div>
+                ) : charts ? (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                        {activeTab === 'cartera' ? (
+                            <>
+                                <ChartCard title="Distribución Regional"><StackedBar data={charts.regional.data} keys={charts.regional.keys} /></ChartCard>
+                                <ChartCard title="Gestión de Cobro"><StackedBar data={charts.cobro.data} keys={charts.cobro.keys} /></ChartCard>
+                                <ChartCard title="Desembolso por Año"><StackedBar data={charts.desembolso.data} keys={charts.desembolso.keys} /></ChartCard>
+                                <ChartCard 
+                                    title={vigenciaSelection ? `Detalle: ${vigenciaSelection.name}` : "Vigencia de Cartera"} 
+                                    action={vigenciaSelection && <button onClick={() => setVigenciaSelection(null)} className="text-indigo-600 text-[9px] font-black bg-indigo-50 px-2 py-1 rounded-lg">VOLVER</button>}
+                                >
+                                    <DrilldownChart data={vigenciaSelection ? vigenciaSelection.children : charts.vigencia} onNodeClick={(n) => !vigenciaSelection && setVigenciaSelection(n)} />
+                                </ChartCard>
+                            </>
+                        ) : (
+                            <>
+                                <ChartCard title="Recaudo General"><DonutWithTotal data={charts.recaudo} total={charts.recaudoTotal} /></ChartCard>
+                                <ChartCard 
+                                    title={gestionSelection ? `Gestión: ${gestionSelection.name}` : "Gestión Global"} 
+                                    action={gestionSelection && <button onClick={() => setGestionSelection(null)} className="text-indigo-600 text-[9px] font-black bg-indigo-50 px-2 py-1 rounded-lg">VOLVER</button>}
+                                >
+                                    <DrilldownChart data={gestionSelection ? gestionSelection.children : charts.gestion} onNodeClick={(n) => !gestionSelection && setGestionSelection(n)} />
+                                </ChartCard>
+                                <ChartCard 
+                                    title={pagoSelection ? `Con Pago: ${pagoSelection.name}` : "Créditos con Pago"} 
+                                    action={pagoSelection && <button onClick={() => setPagoSelection(null)} className="text-indigo-600 text-[9px] font-black bg-indigo-50 px-2 py-1 rounded-lg">VOLVER</button>}
+                                >
+                                    <DrilldownChart data={pagoSelection ? pagoSelection.children : charts.conPago} onNodeClick={(n) => !pagoSelection && setPagoSelection(n)} />
+                                </ChartCard>
+                                <ChartCard 
+                                    title={sinPagoSelection ? `Sin Pago: ${sinPagoSelection.name}` : "Créditos sin Pago"} 
+                                    action={sinPagoSelection && <button onClick={() => setSinPagoSelection(null)} className="text-indigo-600 text-[9px] font-black bg-indigo-50 px-2 py-1 rounded-lg">VOLVER</button>}
+                                >
+                                    <DrilldownChart data={sinPagoSelection ? sinPagoSelection.children : charts.sinPago} onNodeClick={(n) => !sinPagoSelection && setSinPagoSelection(n)} />
+                                </ChartCard>
+                            </>
+                        )}
+                    </div>
+                ) : (
+                    <div className="h-[60vh] border-2 border-dashed border-slate-200 rounded-[3rem] flex flex-col items-center justify-center bg-white/50 text-slate-400">
+                        <FilePieChart size={50} className="mb-4 opacity-20" />
+                        <p className="text-[10px] font-black uppercase">Sube un archivo para generar visualizaciones</p>
+                    </div>
+                )}
             </div>
         </AuthenticatedLayout>
     );
 }
 
-const ChartCard = ({ title, desc, children }) => (
-    <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 transition-all duration-500 group">
-        <div className="flex justify-between items-start mb-8">
-            <div>
-                <h3 className="text-lg font-black text-slate-800 uppercase leading-none tracking-tight">{title}</h3>
-                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-[0.15em] mt-2 italic">{desc}</p>
-            </div>
-            <div className="p-2 bg-indigo-50 rounded-xl group-hover:bg-indigo-600 transition-colors duration-500">
-                <TrendingUp size={18} className="text-indigo-600 group-hover:text-white" />
-            </div>
+// --- COMPONENTES AUXILIARES ---
+
+const ChartCard = ({ title, children, action }) => (
+    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+        <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xs font-black text-slate-800 uppercase italic">{title}</h3>
+            {action}
         </div>
-        <div className="h-[350px] w-full">
-            {children}
+        <div className="h-[300px] w-full">
+            {children ? children : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                    <AlertTriangle size={30} className="mb-2 opacity-50"/>
+                    <span className="text-[9px] font-bold">ERROR AL RENDERIZAR GRÁFICA</span>
+                </div>
+            )}
         </div>
     </div>
 );
+
+const StackedBar = ({ data, keys }) => {
+    if (!data?.length) return null;
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} margin={{ top: 0, right: 0, left: -25, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 9, fontWeight: '800'}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 9}} tickFormatter={(v) => v >= 1000000 ? `${(v/1e6).toFixed(1)}M` : v} />
+                <Tooltip content={<CustomTooltip />} cursor={{fill: '#f8fafc'}} />
+                <Legend iconType="circle" wrapperStyle={{fontSize: '9px', fontWeight: '800', paddingTop: '20px'}} />
+                {keys.map((key, i) => (
+                    <Bar key={key} dataKey={key} stackId="a" fill={COLOR_MAP[key] || DEFAULT_COLORS[i % DEFAULT_COLORS.length]} barSize={24} radius={[4, 4, 0, 0]} />
+                ))}
+            </BarChart>
+        </ResponsiveContainer>
+    );
+};
+
+const DonutWithTotal = ({ data, total }) => {
+    if (!data?.length) return null;
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+                <Pie data={data} cx="50%" cy="50%" innerRadius={75} outerRadius={100} paddingAngle={5} dataKey="value" stroke="none">
+                    {data.map((entry, index) => <Cell key={index} fill={COLOR_MAP[entry.name] || DEFAULT_COLORS[index % DEFAULT_COLORS.length]} />)}
+                    <Label position="center" content={({ viewBox: { cx, cy } }) => (
+                        <g>
+                            <text x={cx} y={cy - 5} textAnchor="middle" className="fill-slate-800 text-lg font-black">{(total || 0).toLocaleString()}</text>
+                            <text x={cx} y={cy + 15} textAnchor="middle" className="fill-slate-400 text-[8px] font-black uppercase">TOTAL CUENTAS</text>
+                        </g>
+                    )}/>
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+            </PieChart>
+        </ResponsiveContainer>
+    );
+};
+
+const DrilldownChart = ({ data, onNodeClick }) => {
+    if (!data?.length) return null;
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+                <Pie data={data} cx="50%" cy="50%" innerRadius={70} outerRadius={100} paddingAngle={5} dataKey="value" stroke="none" 
+                     onClick={(e) => onNodeClick && onNodeClick(e)} className="cursor-pointer outline-none">
+                    {data.map((entry, index) => <Cell key={index} fill={COLOR_MAP[entry.name] || DEFAULT_COLORS[index % DEFAULT_COLORS.length]} />)}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend verticalAlign="bottom" align="center" iconType="circle" wrapperStyle={{fontSize: '9px', fontWeight: '800', paddingTop: '20px'}} />
+            </PieChart>
+        </ResponsiveContainer>
+    );
+};
