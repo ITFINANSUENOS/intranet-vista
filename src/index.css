@@ -67,25 +67,31 @@ button:focus-visible {
   }
 } */
 @import "tailwindcss";
-/* Ocultar barra de scroll para navegadores basados en WebKit (Chrome, Safari, Edge) */
-/*
-  ESTO DEBE IR EN TU ARCHIVO CSS GLOBAL (ej. index.css)
-*/
 
-/* .no-scrollbar { */
-    /* Oculta la barra de desplazamiento en Firefox */
-    /* scrollbar-width: none; */
-    /* Oculta la barra de desplazamiento en IE y Edge (versiones antiguas) */
-    /* -ms-overflow-style: none; */
-/* } */
+@theme {
+  --font-sans: "TuFuente", ui-sans-serif, system-ui, sans-serif;
+}
 
-/* Oculta la barra de desplazamiento en navegadores basados en WebKit (Chrome, Safari, Edge) */
-/* .no-scrollbar::-webkit-scrollbar {
-    display: none;
-} */
+@layer base {
+  /* 1. Forzamos a que todo el texto sea minúsculas por defecto */
+  p, span, h1, h2, h3, h4, h5, h6, li, button, label, a {
+    text-transform: lowercase;
+    display: inline-block; /* Necesario para que first-letter funcione en algunos elementos */
+  }
 
-/* ---------------------------------------------------- */
-/*
-  OPCIONAL: Si deseas que la barra se vea en un tamaño muy pequeño
-  en lugar de desaparecer (estilo personalizado sutil), usa estas clases:
-*/
+  /* 2. Seleccionamos solo la primera letra del bloque de texto y la hacemos mayúscula */
+  p::first-letter, 
+  span::first-letter, 
+  h1::first-letter, 
+  h2::first-letter, 
+  h3::first-letter, 
+  h4::first-letter, 
+  h5::first-letter, 
+  h6::first-letter, 
+  li::first-letter, 
+  button::first-letter, 
+  label::first-letter, 
+  a::first-letter {
+    text-transform: uppercase;
+  }
+}

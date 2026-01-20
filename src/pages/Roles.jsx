@@ -36,15 +36,15 @@ const VIEW_MODULES = [
     {
         category: 'Módulo: Operaciones',
         items: [
-            { label: 'Inventario', permission: 'ver inventario' },
-            { label: 'Documentos', permission: 'gestionar documentos' },
+            { label: 'Inventario', permission: 'view_inventory' },
+            { label: 'Documentos', permission: 'view_documents' },
             { label: 'Análisis DataCrédito', permission: 'view_datacredito' },
         ]
     },
     {
         category: 'Módulo: Soporte',
         items: [
-            { label: 'Mesa de Ayuda', permission: 'usar mesa de ayuda' },
+            { label: 'Mesa de Ayuda', permission: 'view_help_desk' },
         ]
     }
 ];

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CreditCardIcon, ClockIcon, CheckCircleIcon, ArrowPathIcon, TrashIcon, CloudArrowUpIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
-import AuthenticatedLayout from '../layouts/AuthenticatedLayout';
-import { useDataCreditoProcess } from '../context/useDataCreditoProcess'; 
+import AuthenticatedLayout from '../../layouts/AuthenticatedLayout';
+import { useDataCreditoProcess } from '../../context/useDataCreditoProcess'; 
 
 // Sub-componente para el Input de Archivo - Minimalista
 const FileInput = ({ label, accept, onChange, disabled, file }) => (

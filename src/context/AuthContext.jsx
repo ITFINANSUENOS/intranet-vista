@@ -2,7 +2,7 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 
-const API_URL = 'http://api.intranet.test/api'; 
+const API_URL = 'http://localhost:8000/api'; 
 
 const apiClient = axios.create({
     baseURL: API_URL,
