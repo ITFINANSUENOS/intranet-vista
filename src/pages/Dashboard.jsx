@@ -16,7 +16,7 @@ import { HelpSsoButton } from "../components/sso/HelpSsoButton";
 const PRIMARY_COLOR_CLASS = 'text-[rgb(5,25,49)]'; 
 const BG_PRIMARY_DARK = 'bg-[rgb(5,25,49)]';
 
-const getBaseUrl = (apiClient) => apiClient.defaults.baseURL ? apiClient.defaults.baseURL.replace('/api', '') : 'https://intranet.electrocreditosdelcauca.com/';
+const getBaseUrl = (apiClient) => apiClient.defaults.baseURL ? apiClient.defaults.baseURL.replace('/api', '') : (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '');
 
 export default function Dashboard() {
     const { apiClient, user } = useAuth();
