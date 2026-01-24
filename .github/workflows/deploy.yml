@@ -12,7 +12,7 @@ jobs:
       - name: 2. Configurar Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
       - name: 3. Instalar dependencias
         run: npm install
       - name: 4. Compilar proyecto (Build)
