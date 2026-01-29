@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - master
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -21,14 +24,17 @@ jobs:
           # Aquí le decimos a React la URL de la API
           VITE_API_URL: "https://intranet.electrocreditosdelcauca.com/api"
       - name: 5. Configurar credenciales de AWS
+        if: github.event_name == 'push'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
       - name: 6. Subir archivos a S3
+        if: github.event_name == 'push'
         run: aws s3 sync dist/ s3://intranet-electrocreditos-frontend --delete
       - name: 7. Limpiar cache de CloudFront (Invalidation)
+        if: github.event_name == 'push'
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_ID }} \
