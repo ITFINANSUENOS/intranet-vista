@@ -234,7 +234,8 @@ export default function Resultados({ data, selectedFilters }) {
                     <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><Layers size={18} /></div>
                     <h3 className="text-sm font-black text-slate-700 uppercase tracking-wide">Desglose por Franja Seleccionada</h3>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* MODIFICACIÓN AQUÍ: Se eliminó lg:grid-cols-2 para que siempre sea una columna */}
+                <div className="grid grid-cols-1 gap-6">
                     {FRANJAS_CONFIG.map(f => (
                         <ZoneMiniTable 
                             key={f.key} 
