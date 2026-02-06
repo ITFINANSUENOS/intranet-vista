@@ -17,19 +17,14 @@ export const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
-    // MEJORA 1: Inicializar el estado LEYENDO el localStorage directamente.
-    // Esto evita que user sea null al recargar la página.
     const [user, setUser] = useState(() => {
         const savedUser = localStorage.getItem('user');
         return savedUser ? JSON.parse(savedUser) : null;
     });
 
-    // Si hay usuario en storage, asumimos que está autenticado hasta que la API diga lo contrario
     const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('token'));
-    
     const [loading, setLoading] = useState(true);
 
-    // Función interna para limpiar (sin recargar página aún)
     const cleanSession = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -37,7 +32,6 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false);
     };
 
-    // Interceptores (Se mantienen casi igual, pero usan cleanSession)
     useEffect(() => {
         const reqInterceptor = apiClient.interceptors.request.use(config => {
             const token = localStorage.getItem('token');
@@ -49,7 +43,11 @@ export const AuthProvider = ({ children }) => {
             response => response,
             error => {
                 if (error.response && error.response.status === 401) {
-                    cleanSession();
+                    // Solo limpiar sesión si NO estamos en la ruta de login
+                    // (para evitar limpiar cuando el usuario apenas intenta loguearse y falla la clave)
+                    if (!error.config.url.includes('/users/login')) {
+                        cleanSession();
+                    }
                 }
                 return Promise.reject(error);
             }
@@ -70,11 +68,7 @@ export const AuthProvider = ({ children }) => {
 
         try {
             const response = await apiClient.get('/me');
-            
-            // MEJORA 2: Manejo robusto de la respuesta de Laravel
-            // A veces viene en response.data y a veces en response.data.data
             const userData = response.data.data || response.data;
-            
             localStorage.setItem('user', JSON.stringify(userData));
             setUser(userData);
             setIsAuthenticated(true);
@@ -90,11 +84,11 @@ export const AuthProvider = ({ children }) => {
         loadUserFromToken();
     }, []);
 
+    // --- FUNCIÓN LOGIN MODIFICADA ---
     const login = async (email, password) => {
         try {
             const response = await apiClient.post('/users/login', { email, password });
             
-            // Asegúrate de leer el token y el usuario correctamente
             const token = response.data.token || response.data.access_token;
             const userData = response.data.user || response.data.data?.user || response.data.data;
 
@@ -106,15 +100,46 @@ export const AuthProvider = ({ children }) => {
             setUser(userData);
             setIsAuthenticated(true);
             return true;
+
         } catch (error) {
-            console.error(error);
-            throw error; // Lanzamos el error para manejarlo en el formulario
+            console.error("Error en login:", error);
+
+            // Estructuramos el error para que LoginPage no se rompa (pantalla blanca)
+            let errorData = {
+                type: 'general',
+                userMessage: 'Ocurrió un error inesperado.'
+            };
+
+            if (error.response) {
+                // Errores que vienen del backend
+                const status = error.response.status;
+                const msg = error.response.data.error || 'Error en credenciales';
+
+                if (status === 404) {
+                    // Backend dice que no encontró el email
+                    errorData = { type: 'email', userMessage: msg };
+                } else if (status === 401) {
+                    // Backend dice que la contraseña está mal
+                    errorData = { type: 'password', userMessage: msg };
+                } else if (status === 422) {
+                     // Error de validación (formato de email invalido, campos vacios)
+                     errorData = { type: 'email', userMessage: 'Revisa el formato de los datos.' };
+                } else if (status === 500) {
+                    errorData = { type: 'general', userMessage: 'Error del servidor. Intenta más tarde.' };
+                }
+            } else if (error.request) {
+                // No hubo respuesta (servidor apagado o sin internet)
+                errorData = { type: 'connection', userMessage: 'No se pudo conectar con el servidor.' };
+            }
+
+            // Lanzamos el objeto estructurado
+            throw errorData; 
         }
     };
 
     const logout = (callback) => {
         cleanSession();
-        apiClient.post('/logout').catch(() => {}); // Intentar avisar al back, sin bloquear
+        apiClient.post('/logout').catch(() => {});
         if (callback) callback();
     };
 

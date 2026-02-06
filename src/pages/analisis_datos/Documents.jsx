@@ -9,7 +9,7 @@ import Cartera from './Cartera';
 import Seguirientos from './Seguimientos';
 import Resultados from './Resultados';
 
-// Importación del botón (Asegúrate que esta ruta sea correcta según tu estructura)
+// Importación del botón
 import FileUploadButton from '../../components/FileUploadButton'; 
 
 export default function Documents() {
@@ -37,13 +37,30 @@ export default function Documents() {
         Franja_Cartera: [] 
     });
     
+    // --- CORRECCIÓN 1: Obtención robusta del ID ---
     useEffect(() => {
-        apiClient.get('/reportes/activo').then(({ data }) => {
-            const id = data?.active_job_id || data?.job_id;
-            if (id) setSelectedJobId(id);
-        });
+        apiClient.get('/reportes/activo')
+            .then((response) => {
+                // No desestructuramos inmediatamente para poder inspeccionar toda la respuesta
+                const data = response.data;
+                console.log("Respuesta /reportes/activo:", data);
+
+                // Laravel a veces devuelve { data: { active_job_id: 123 } } y a veces directo { active_job_id: 123 }
+                // Esta lógica cubre ambos casos:
+                const responseData = data?.data || data; 
+                const id = responseData?.active_job_id || responseData?.job_id || data?.active_job_id;
+
+                if (id) {
+                    console.log("ID encontrado:", id);
+                    setSelectedJobId(id);
+                } else {
+                    console.error("No se encontró active_job_id en la respuesta", data);
+                }
+            })
+            .catch(err => console.error("Error al obtener reporte activo:", err));
     }, [apiClient]);
 
+    // --- CORRECCIÓN 2: Carga de módulos segura ---
     useEffect(() => {
         if (selectedJobId) {
             setLoading(true);
@@ -55,15 +72,22 @@ export default function Documents() {
                 apiClient.get(`/wallet/init/resultados${query}`)
             ])
             .then(([resC, resS, resR]) => { 
+                console.log("Datos Cartera:", resC.data);
+                
+                // Tu controlador WalletController devuelve: { data: $graficos }
+                // Axios envuelve eso en otro 'data'. Así que resC.data.data son tus gráficos.
+                // Si tus gráficos NO tienen otra propiedad 'data' dentro, resC.data.data.data será undefined.
+                // Usamos "||" para intentar leerlo profundo, y si falla, leerlo un nivel antes.
+                
                 setModuleData({ 
-                    cartera: resC.data.data.data, 
-                    seguimientos: resS.data.data.data,
-                    resultados: resR.data.data 
+                    cartera:      resC.data?.data?.data || resC.data?.data, 
+                    seguimientos: resS.data?.data?.data || resS.data?.data,
+                    resultados:   resR.data?.data?.data || resR.data?.data 
                 }); 
                 setLoading(false); 
             })
             .catch((err) => {
-                console.error("Error cargando datos:", err);
+                console.error("Error cargando datos de gráficas:", err);
                 setLoading(false);
             });
         }
@@ -120,7 +144,7 @@ export default function Documents() {
                     </div>
                 )}
                 
-                {/* Header Restaurado */}
+                {/* Header */}
                 <header className="bg-white px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 z-40 h-auto md:h-20 gap-4">
                     <div className="flex items-center gap-3">
                         <button 
