@@ -6,13 +6,10 @@ import {
     LockClosedIcon,
     AtSymbolIcon,
     ExclamationTriangleIcon,
-    EnvelopeIcon,
-    KeyIcon,
     ServerIcon
 } from '@heroicons/react/24/outline';
 
 const DARK_COLOR = 'rgba(4, 24, 48)';
-// Este es el color que solicitaste para el texto de la alerta (rgba(4, 24, 48, 0.7))
 const LIGHT_ACCENT = 'rgba(4, 24, 48, 0.7)';
 
 export default function LoginPage() {
@@ -26,7 +23,7 @@ export default function LoginPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setAlert(null); // Limpiar alertas previas
+        setAlert(null);
         setProcessing(true);
 
         try {
@@ -34,10 +31,23 @@ export default function LoginPage() {
             navigate('/dashboard');
 
         } catch (err) {
-            setAlert({
-                type: err.type || 'general',
-                message: err.userMessage || 'Error desconocido al iniciar sesión'
-            });
+            // 1. REGISTRO EN CONSOLA (Para el desarrollador)
+            // Aquí verás el error real: "email", "password", etc.
+            console.group("🔴 Error de Inicio de Sesión");
+            console.error("Tipo de error:", err.type);
+            console.error("Mensaje técnico:", err.userMessage || err.message);
+            console.error("Traza completa:", err);
+            console.groupEnd();
+
+            // 2. FEEDBACK AL USUARIO (Genérico por seguridad)
+            // Determinamos qué mostrar en la UI basándonos en si es un error de conexión o de credenciales
+            let alertType = 'invalid'; // Por defecto: Credenciales inválidas
+
+            if (err.type === 'connection' || err.message === 'Network Error') {
+                alertType = 'connection';
+            }
+
+            setAlert({ type: alertType });
         } finally {
             setProcessing(false);
         }
@@ -46,27 +56,18 @@ export default function LoginPage() {
     const logoUrl = '/images/logos/logo.png';
 
     // Configuración visual de las alertas
-    // CAMBIO REALIZADO: Se cambió border-* por border-white y se quitaron las clases text-*
+    // Se han unificado los estilos para que coincidan con la elegancia del DARK_COLOR
     const alertConfig = {
-        email: {
-            icon: <EnvelopeIcon className="w-8 h-8 text-orange-600" />,
-            title: 'Correo no encontrado',
-            bg: 'bg-orange-50 border-white'
-        },
-        password: {
-            icon: <KeyIcon className="w-8 h-8 text-yellow-600" />,
-            title: 'Contraseña incorrecta',
-            bg: 'bg-yellow-50 border-white'
+        invalid: {
+            icon: <ExclamationTriangleIcon className="w-6 h-6 text-red-500" />,
+            title: 'Credenciales inválidas',
+            classes: 'bg-red-50 border-l-4 border-red-500' 
         },
         connection: {
-            icon: <ServerIcon className="w-8 h-8 text-red-600" />,
+            icon: <ServerIcon className="w-6 h-6 text-orange-500" />,
             title: 'Error de conexión',
-            bg: 'bg-red-50 border-white'
-        },
-        general: {
-            icon: <ExclamationTriangleIcon className="w-8 h-8 text-red-600" />,
-            title: 'Error de acceso',
-            bg: 'bg-red-50 border-white'
+            message: 'No pudimos conectar con el servidor. Intenta más tarde.',
+            classes: 'bg-orange-50 border-l-4 border-orange-500'
         }
     };
 
@@ -75,25 +76,24 @@ export default function LoginPage() {
             <div className="min-h-screen flex items-center justify-center bg-white">
                 <div className="w-full max-w-md p-8 bg-white border border-gray-200 rounded-3xl shadow-xl">
 
-                    {/* ALERT INTELIGENTE */}
+                    {/* ALERT MEJORADO Y RELACIONADO CON EL ESTILO */}
                     {alert && alertConfig[alert.type] && (
-                        <div className={`mb-6 p-5 rounded-2xl border-2 shadow-lg flex items-start gap-4 ${alertConfig[alert.type].bg}`}>
-                            <div className="flex-shrink-0">
+                        <div className={`mb-6 p-4 rounded-r-xl shadow-sm flex items-start gap-3 transition-all duration-300 ${alertConfig[alert.type].classes}`}>
+                            <div className="flex-shrink-0 mt-0.5">
                                 {alertConfig[alert.type].icon}
                             </div>
-                            {/* CAMBIO REALIZADO: Se agregó el estilo de color LIGHT_ACCENT al contenedor del texto */}
-                            <div style={{ color: LIGHT_ACCENT }}>
-                                <h3 className="text-lg font-bold">
+                            <div>
+                                {/* Título con el color principal de la página */}
+                                <h3 className="text-sm font-bold" style={{ color: DARK_COLOR }}>
                                     {alertConfig[alert.type].title}
                                 </h3>
-                                <p className="mt-1 text-sm font-medium leading-tight">
-                                    {alert.message}
-                                </p>
+                                
                             </div>
                         </div>
                     )}
 
                     <div className="flex flex-col items-center mb-8">
+                        {/* Asegúrate de que la ruta de la imagen sea correcta */}
                         <img src={logoUrl} alt="Logo" className="w-80 h-40 mb-4 object-contain" />
                         <h1 className="text-3xl font-bold" style={{ color: DARK_COLOR }}>
                             Bienvenido
@@ -112,7 +112,7 @@ export default function LoginPage() {
                                     type="email"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full pl-10 py-3 rounded-xl bg-white border border-gray-300 focus:ring-2 focus:ring-blue-400 outline-none transition-all"
+                                    className="w-full pl-10 py-3 rounded-xl bg-white border border-gray-300 focus:ring-2 focus:ring-blue-400 outline-none transition-all placeholder-gray-400"
                                     style={{ color: DARK_COLOR }}
                                     placeholder="tu@correo.com"
                                     required
@@ -131,7 +131,7 @@ export default function LoginPage() {
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-10 py-3 rounded-xl bg-white border border-gray-300 focus:ring-2 focus:ring-blue-400 outline-none transition-all"
+                                    className="w-full pl-10 py-3 rounded-xl bg-white border border-gray-300 focus:ring-2 focus:ring-blue-400 outline-none transition-all placeholder-gray-400"
                                     style={{ color: DARK_COLOR }}
                                     placeholder="••••••••"
                                     required
@@ -142,7 +142,7 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={processing}
-                            className="w-full py-3 rounded-xl font-bold shadow-lg text-white disabled:opacity-50 hover:opacity-90 transition-opacity"
+                            className="w-full py-3 rounded-xl font-bold shadow-lg text-white disabled:opacity-50 hover:opacity-90 transition-opacity transform active:scale-95"
                             style={{ backgroundColor: DARK_COLOR }}
                         >
                             {processing ? 'Verificando...' : 'Iniciar Sesión'}
