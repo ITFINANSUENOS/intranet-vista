@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import AuthenticatedLayout from '../../layouts/AuthenticatedLayout';
 import { useAuth } from '../../context/AuthContext';
-import { RefreshCw, CheckCircle2, Activity, AlertTriangle, X, Filter as FilterIcon, FileText, ShoppingBag } from 'lucide-react';
+// Se eliminaron FileText y ShoppingBag de los imports ya que no se usan
+import { RefreshCw, CheckCircle2, Activity, AlertTriangle, X, Filter as FilterIcon } from 'lucide-react';
 
 // Importamos los componentes locales
 import { FilterSidebar } from './DashboardComponents';
@@ -182,28 +183,28 @@ export default function Documents() {
                                 </button>
                             ))}
                             
-                            {/* BOTÓN DETALLADOS (AHORA ANTES DE COMERCIAL) */}
+                            {/* BOTÓN DETALLADOS (SIN ICONO) */}
                             <button 
                                 onClick={() => setActiveTab('detallados')} 
-                                className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap flex items-center gap-2 ${
+                                className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
                                     activeTab === 'detallados' 
                                     ? 'bg-white text-indigo-600 shadow-sm' 
                                     : 'text-slate-400 hover:text-slate-600'
                                 }`}
                             >
-                                <FileText size={14} /> DETALLADOS
+                                DETALLADOS
                             </button>
 
-                             {/* --- BOTÓN COMERCIAL (MOVIDO AL FINAL) --- */}
+                             {/* --- BOTÓN COMERCIAL (SIN ICONO) --- */}
                              <button 
                                 onClick={() => setActiveTab('comercial')} 
-                                className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap flex items-center gap-2 ${
+                                className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
                                     activeTab === 'comercial' 
                                     ? 'bg-white text-indigo-600 shadow-sm' 
                                     : 'text-slate-400 hover:text-slate-600'
                                 }`}
                             >
-                                <ShoppingBag size={14} /> COMERCIAL
+                                COMERCIAL
                             </button>
                         </div>
 
