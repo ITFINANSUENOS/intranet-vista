@@ -4,7 +4,8 @@ import {
 } from 'recharts';
 import { 
     RefreshCw, AlertCircle, TrendingUp, Users, SearchX, Trophy, 
-    Database, Columns, X, Loader2, Clock, AlertTriangle, XCircle, Filter
+    Database, Columns, X, Loader2, Clock, AlertTriangle, XCircle, Filter,
+    ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown
 } from 'lucide-react';
 
 // Asegúrate de que la ruta sea correcta a tu configuración de colores
@@ -53,7 +54,7 @@ const COLUMNAS_COSECHA_INICIALES = [
 ];
 
 // ==========================================
-// 3. COMPONENTE DE TABLA REMOTA CON FILTROS
+// 3. COMPONENTE DE TABLA REMOTA CON PAGINACIÓN Y FILTROS AVANZADOS
 // ==========================================
 const TablaComercialRemota = ({ 
     apiClient, 
@@ -65,25 +66,32 @@ const TablaComercialRemota = ({
     onLoadComplete, 
     colorBadge, 
     initialColumns = [],
-    filterableColumns = [] // Nueva propiedad para definir filtros
+    filterConfig = [] 
 }) => {
     // Estados de datos
-    const [fullData, setFullData] = useState([]); 
+    const [tableData, setTableData] = useState([]); 
     const [columns, setColumns] = useState([]); 
     const [visibleColumns, setVisibleColumns] = useState([]); 
     
-    // Estados de control
+    // Estados de control y Paginación
     const [loading, setLoading] = useState(false);
     const [dataLoaded, setDataLoaded] = useState(false); 
-    
+    const [pagination, setPagination] = useState({
+        current: 1,
+        total_pages: 0,
+        total_records: 0,
+        page_size: 15
+    });
+
     // Estados de UI
     const [showColumnSelector, setShowColumnSelector] = useState(false);
     
     // Estados de Filtros
     const [activeFilters, setActiveFilters] = useState({});
+    const [tempFilters, setTempFilters] = useState({}); 
 
-    // --- CARGA DE DATOS ---
-    const fetchData = useCallback(async () => {
+    // --- CARGA DE DATOS (Server-Side Pagination) ---
+    const fetchData = useCallback(async (pageToLoad = 1, filtersToApply = activeFilters) => {
         if (!jobId) return;
         
         setLoading(true);
@@ -91,32 +99,35 @@ const TablaComercialRemota = ({
             const response = await apiClient.post('/wallet/buscar', {
                 job_id: jobId,
                 origen: origen, 
-                page: 1,           
-                page_size: 100000, 
-                filters: {} 
+                page: pageToLoad,           
+                page_size: 15,
+                filters: filtersToApply 
             });
 
             const responseData = response.data?.data || [];
+            const meta = response.data?.meta || {};
 
             if (responseData.length > 0) {
                 const detectedCols = Object.keys(responseData[0]);
                 
                 if (columns.length === 0) {
                     setColumns(detectedCols);
-                    
                     if (initialColumns && initialColumns.length > 0) {
                         const orderedVisibleCols = initialColumns.filter(col => detectedCols.includes(col));
-                        if (orderedVisibleCols.length > 0) {
-                            setVisibleColumns(orderedVisibleCols);
-                        } else {
-                            setVisibleColumns(detectedCols);
-                        }
+                        setVisibleColumns(orderedVisibleCols.length > 0 ? orderedVisibleCols : detectedCols);
                     } else {
                         setVisibleColumns(detectedCols);
                     }
                 }
             }
-            setFullData(responseData);
+
+            setTableData(responseData);
+            setPagination({
+                current: meta.page || pageToLoad,
+                total_pages: meta.pages || 0,
+                total_records: meta.total || 0,
+                page_size: meta.page_size || 15
+            });
             setDataLoaded(true);
 
         } catch (err) {
@@ -128,47 +139,54 @@ const TablaComercialRemota = ({
                 onLoadComplete();
             }
         }
-    }, [jobId, origen, apiClient, columns.length, onLoadComplete, initialColumns]);
+    }, [jobId, origen, apiClient, columns.length, onLoadComplete, initialColumns, activeFilters]);
 
-    // EFECTO DE CARGA CONTROLADA
+    // EFECTO DE CARGA INICIAL
     useEffect(() => {
         if (jobId && canLoad && !dataLoaded && !loading) {
-            fetchData();
+            fetchData(1);
         }
     }, [jobId, canLoad, dataLoaded, loading, fetchData]);
 
-    // --- LÓGICA DE FILTROS ---
-    
-    // 1. Extraer opciones únicas para los selectores
-    const filterOptions = useMemo(() => {
-        if (!fullData || fullData.length === 0 || filterableColumns.length === 0) return {};
-        
-        const options = {};
-        filterableColumns.forEach(col => {
-            // Extraemos valores únicos, filtramos nulos/vacíos y ordenamos
-            const uniqueValues = [...new Set(fullData.map(item => item[col]).filter(val => val !== null && val !== undefined && val !== ''))].sort();
-            options[col] = uniqueValues;
-        });
-        return options;
-    }, [fullData, filterableColumns]);
+    // --- HANDLERS DE PAGINACIÓN ---
+    const handlePageChange = (newPage) => {
+        if (newPage >= 1 && newPage <= pagination.total_pages) {
+            fetchData(newPage);
+        }
+    };
 
-    // 2. Aplicar filtros a los datos
-    const filteredData = useMemo(() => {
-        return fullData.filter(item => {
-            // Verifica que el ítem cumpla con TODOS los filtros activos
-            return Object.entries(activeFilters).every(([key, value]) => {
-                if (!value) return true; // Si el filtro está vacío ("Todos"), pasa
-                return String(item[key]) === String(value);
-            });
-        });
-    }, [fullData, activeFilters]);
-
-    // 3. Handler para cambiar filtros
+    // --- HANDLERS DE FILTROS ---
     const handleFilterChange = (col, value) => {
-        setActiveFilters(prev => ({
-            ...prev,
-            [col]: value
-        }));
+        setTempFilters(prev => ({ ...prev, [col]: value }));
+        
+        const config = filterConfig.find(f => f.key === col);
+        if (config?.type === 'select') {
+             const newFilters = { ...activeFilters, [col]: value };
+            if (!value) delete newFilters[col];
+            setActiveFilters(newFilters);
+            fetchData(1, newFilters);
+        }
+    };
+
+    const applyFilter = (col) => {
+        const value = tempFilters[col];
+        const newFilters = { ...activeFilters, [col]: value };
+        if (!value) delete newFilters[col];
+        
+        setActiveFilters(newFilters);
+        fetchData(1, newFilters); 
+    };
+
+    const handleKeyDown = (e, col) => {
+        if (e.key === 'Enter') {
+            applyFilter(col);
+        }
+    };
+
+    const clearFilters = () => {
+        setTempFilters({});
+        setActiveFilters({});
+        fetchData(1, {});
     };
 
     // --- HANDLERS UI ---
@@ -184,14 +202,14 @@ const TablaComercialRemota = ({
             {/* HEADER */}
             <div className="p-6 border-b border-slate-50 flex flex-col gap-4">
                 
-                {/* Título y Controles Principales */}
+                {/* Título y Controles */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div className="flex items-center gap-3">
                         <div className={`p-2 rounded-xl transition-colors ${canLoad ? (colorBadge || 'bg-indigo-50 text-indigo-600') : 'bg-slate-100 text-slate-400'}`}>
                             {Icono ? <Icono size={18} /> : <Database size={18} />}
                         </div>
                         <div>
-                            <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">
+                            <h3 className="text-[11px] font-black text-indigo-700 uppercase tracking-widest">
                                 {titulo}
                             </h3>
                             <p className="text-[9px] text-slate-400 font-medium mt-0.5">
@@ -199,7 +217,7 @@ const TablaComercialRemota = ({
                                     ? 'En cola de espera...' 
                                     : loading 
                                         ? 'Cargando datos...' 
-                                        : `Mostrando: ${filteredData.length} de ${fullData.length}`
+                                        : 'Datos listos'
                                 }
                             </p>
                         </div>
@@ -238,44 +256,61 @@ const TablaComercialRemota = ({
                     )}
                 </div>
 
-                {/* BARRA DE FILTROS (Si hay columnas filtrables definidas y datos cargados) */}
-                {filterableColumns.length > 0 && dataLoaded && (
+                {/* BARRA DE FILTROS DINÁMICA */}
+                {filterConfig.length > 0 && dataLoaded && (
                     <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-50 animate-in slide-in-from-top-1">
                         <div className="flex items-center gap-2 text-slate-400 mr-2">
                             <Filter size={14} />
-                            <span className="text-[10px] font-bold uppercase">Filtrar por:</span>
+                            <span className="text-[10px] font-bold uppercase">Filtrar:</span>
                         </div>
-                        {filterableColumns.map(col => (
-                            <div key={col} className="flex flex-col gap-1 min-w-[150px]">
-                                <select 
-                                    className="w-full bg-slate-50 border border-slate-200 text-slate-700 text-[10px] font-medium rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all cursor-pointer"
-                                    value={activeFilters[col] || ''}
-                                    onChange={(e) => handleFilterChange(col, e.target.value)}
-                                >
-                                    <option value="">Todo: {col.replace(/_/g, ' ')}</option>
-                                    {filterOptions[col]?.map((opt, idx) => (
-                                        <option key={idx} value={opt}>{opt}</option>
-                                    ))}
-                                </select>
+                        {filterConfig.map((config) => (
+                            <div key={config.key} className="relative flex flex-col gap-1 min-w-[160px]">
+                                {config.type === 'select' ? (
+                                    <div className="relative">
+                                        <select
+                                            className={`w-full appearance-none bg-slate-50 border text-slate-700 text-[10px] font-medium rounded-lg px-2 py-1.5 pr-8 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all cursor-pointer
+                                                ${activeFilters[config.key] ? 'border-indigo-300 bg-indigo-50/30' : 'border-slate-200'}
+                                            `}
+                                            value={tempFilters[config.key] || ''}
+                                            onChange={(e) => handleFilterChange(config.key, e.target.value)}
+                                        >
+                                            <option value="">{`Todos: ${config.label || config.key.replace(/_/g, ' ')}`}</option>
+                                            {config.options && config.options.map((opt, i) => (
+                                                <option key={i} value={opt}>{opt}</option>
+                                            ))}
+                                        </select>
+                                        <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    </div>
+                                ) : (
+                                    <input
+                                        type="text"
+                                        placeholder={`Buscar ${config.label || config.key.replace(/_/g, ' ')}...`}
+                                        className={`w-full bg-slate-50 border text-slate-700 text-[10px] font-medium rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all
+                                            ${activeFilters[config.key] ? 'border-indigo-300 bg-indigo-50/30' : 'border-slate-200'}
+                                        `}
+                                        value={tempFilters[config.key] || ''}
+                                        onChange={(e) => handleFilterChange(config.key, e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, config.key)}
+                                        onBlur={() => applyFilter(config.key)}
+                                    />
+                                )}
                             </div>
                         ))}
-                        {/* Botón para limpiar filtros si hay alguno activo */}
-                        {Object.values(activeFilters).some(v => v) && (
+                        
+                        {Object.keys(activeFilters).length > 0 && (
                             <button 
-                                onClick={() => setActiveFilters({})}
-                                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[10px] font-bold transition-colors"
+                                onClick={clearFilters}
+                                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[10px] font-bold transition-colors flex items-center gap-1"
                             >
-                                Limpiar
+                                <XCircle size={12} /> Limpiar
                             </button>
                         )}
                     </div>
                 )}
             </div>
 
-            {/* BODY */}
+            {/* BODY TABLE */}
             <div className="overflow-auto custom-scrollbar relative max-h-[500px] bg-slate-50/30 min-h-[150px]">
-                
-                {/* ESTADO: ESPERA */}
                 {!canLoad && (
                     <div className="absolute inset-0 bg-white z-20 flex items-center justify-center">
                         <div className="flex flex-col items-center gap-2 text-slate-300">
@@ -285,17 +320,15 @@ const TablaComercialRemota = ({
                     </div>
                 )}
 
-                {/* ESTADO: CARGANDO */}
                 {loading && (
                     <div className="absolute inset-0 bg-white/80 z-20 flex items-center justify-center backdrop-blur-[1px]">
                         <div className="flex flex-col items-center gap-2">
                             <Loader2 className="animate-spin text-indigo-600" size={32} />
-                            <span className="text-[10px] font-bold text-indigo-600">Cargando...</span>
+                            <span className="text-[10px] font-bold text-indigo-600">Cargando datos...</span>
                         </div>
                     </div>
                 )}
 
-                {/* TABLA DE DATOS */}
                 <table className="w-full text-[10px] border-collapse relative">
                     <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm ring-1 ring-slate-200/50">
                         <tr>
@@ -313,8 +346,8 @@ const TablaComercialRemota = ({
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
-                        {filteredData.length > 0 ? (
-                            filteredData.map((row, idx) => (
+                        {tableData.length > 0 ? (
+                            tableData.map((row, idx) => (
                                 <tr key={idx} className="hover:bg-indigo-50/10 transition-colors">
                                     {visibleColumns.map(col => (
                                         <td key={`${idx}-${col}`} className="p-3 text-slate-600 border-r border-transparent truncate max-w-[200px]" title={row[col]}>
@@ -327,9 +360,7 @@ const TablaComercialRemota = ({
                             !loading && dataLoaded && (
                                 <tr>
                                     <td colSpan={visibleColumns.length || 1} className="p-12 text-center text-slate-400 italic">
-                                        {fullData.length > 0 
-                                            ? 'No hay registros que coincidan con los filtros seleccionados.' 
-                                            : 'No se encontraron resultados en la base de datos.'}
+                                        No se encontraron registros coinciden con los filtros.
                                     </td>
                                 </tr>
                             )
@@ -337,9 +368,28 @@ const TablaComercialRemota = ({
                     </tbody>
                 </table>
             </div>
-            <div className="p-2 border-t border-slate-100 bg-slate-50 text-right">
-                <span className="text-[9px] font-black text-slate-300 uppercase tracking-wider pr-4">Fin de Tabla</span>
-            </div>
+
+            {/* FOOTER PAGINACIÓN */}
+            {dataLoaded && canLoad && (
+                <div className="p-3 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex flex-col gap-0.5">
+                        <div className="text-[10px] text-slate-600 font-medium">
+                            Total Registros: <span className="font-black text-indigo-700">{pagination.total_records}</span>
+                        </div>
+                        <div className="text-[9px] text-slate-400">
+                            Página <span className="font-bold text-slate-600">{pagination.current}</span> de {pagination.total_pages}
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => handlePageChange(1)} disabled={pagination.current === 1 || loading} className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronsLeft size={14} /></button>
+                        <button onClick={() => handlePageChange(pagination.current - 1)} disabled={pagination.current === 1 || loading} className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft size={14} /></button>
+                        <span className="px-3 py-1 bg-slate-50 rounded-lg text-[10px] font-bold text-slate-600 border border-slate-100">{pagination.current}</span>
+                        <button onClick={() => handlePageChange(pagination.current + 1)} disabled={pagination.current === pagination.total_pages || loading} className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronRight size={14} /></button>
+                        <button onClick={() => handlePageChange(pagination.total_pages)} disabled={pagination.current === pagination.total_pages || loading} className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronsRight size={14} /></button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -368,14 +418,11 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
     const [data, setData] = useState([]);
     const [loadingCharts, setLoadingCharts] = useState(false);
     const [error, setError] = useState(null);
-
-    // --- SECUENCIA DE CARGA ---
     const [loadStep, setLoadStep] = useState(0); 
     
     // --- CARGA DE GRÁFICOS ---
     useEffect(() => {
         if (!jobId) return;
-
         setLoadingCharts(true);
         setError(null);
         setData([]); 
@@ -394,11 +441,10 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         })
         .finally(() => {
             setLoadingCharts(false);
-            setLoadStep(1); // Inicia cascada
+            setLoadStep(1); 
         });
     }, [jobId, apiClient, selectedFilters]);
 
-    // Función para avanzar paso a paso
     const handleStepComplete = useCallback((currentStep) => {
         setLoadStep(prev => {
             if (prev === currentStep) return prev + 1;
@@ -406,23 +452,29 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         });
     }, []);
 
-    // --- PROCESAMIENTO PIVOTE (GRÁFICOS) ---
+    // --- PROCESAMIENTO PIVOTE Y EXTRACCIÓN DE OPCIONES PARA FILTROS ---
     const useChartData = (rawData) => {
-        if (!rawData || rawData.length === 0) return { processedData: [], uniqueStates: [], totals: {} };
+        if (!rawData || rawData.length === 0) return { processedData: [], uniqueStates: [], totals: {}, uniqueSellers: [] };
 
         const statesSet = new Set();
+        const sellersSet = new Set(); 
         const grouped = {};
 
         rawData.forEach(item => {
             const vendedor = item.Nombre_Vendedor || item.nombre_vendedor || 'SIN VENDEDOR';
             const estado = String(item.Estado || item.estado || 'SIN ESTADO').toUpperCase().trim();
+            
             statesSet.add(estado);
+            sellersSet.add(vendedor); 
+
             if (!grouped[vendedor]) grouped[vendedor] = { name: vendedor, total: 0 };
             grouped[vendedor][estado] = (grouped[vendedor][estado] || 0) + 1;
             grouped[vendedor].total += 1;
         });
 
         const uniqueStates = Array.from(statesSet).sort();
+        const uniqueSellers = Array.from(sellersSet).sort(); 
+
         const processedData = Object.values(grouped).sort((a, b) => b.total - a.total);
         const totals = { total: 0 };
         uniqueStates.forEach(s => totals[s] = 0);
@@ -431,11 +483,33 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
             uniqueStates.forEach(s => { if (row[s]) totals[s] += row[s]; });
         });
 
-        return { processedData, uniqueStates, totals };
+        return { processedData, uniqueStates, totals, uniqueSellers };
     };
 
-    const { processedData, uniqueStates, totals } = React.useMemo(() => useChartData(data), [data]);
-    const chartData = React.useMemo(() => processedData.slice(0, 15), [processedData]);
+    const { processedData, uniqueStates, totals, uniqueSellers } = useMemo(() => useChartData(data), [data]);
+    const chartData = useMemo(() => processedData.slice(0, 15), [processedData]);
+
+    // --- CONFIGURACIÓN DE FILTROS PARA RETANQUEOS ---
+    const filtrosRetanqueo = useMemo(() => [
+        { 
+            key: 'Vendedor_Activo', 
+            label: 'Activo', 
+            type: 'select', 
+            options: ['SI', 'NO'] 
+        },
+        { 
+            key: 'Nombre_Vendedor', 
+            label: 'Vendedor', 
+            type: 'select', 
+            options: uniqueSellers 
+        },
+        { 
+            key: 'Regional_Venta', 
+            label: 'Regional', 
+            type: 'text' 
+        }
+    ], [uniqueSellers]);
+
 
     if (loadingCharts) {
         return (
@@ -458,12 +532,12 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
     return (
         <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-700 fade-in">
             
-            {/* SECCIÓN 1: GRÁFICOS Y RESUMEN */}
+            {/* GRÁFICOS Y RESUMEN */}
             {processedData.length > 0 ? (
                 <>
                     <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                            <h3 className="text-[11px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-2">
                                 <Trophy size={16} className="text-amber-500"/> Top 15 Vendedores
                             </h3>
                             <div className="hidden md:flex gap-2">
@@ -495,7 +569,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
                         <div className="p-6 border-b border-slate-50 flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <Users size={18} className="text-indigo-600"/>
-                                <h3 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Resumen Numérico</h3>
+                                <h3 className="text-[11px] font-black text-indigo-700 uppercase tracking-widest">Resumen por vendedor y estado</h3>
                             </div>
                         </div>
                         <div className="overflow-auto custom-scrollbar max-h-[500px]">
@@ -516,6 +590,20 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
                                         </tr>
                                     ))}
                                 </tbody>
+                                {/* === NUEVO PIE DE TABLA CON TOTALES POR COLUMNA === */}
+                                <tfoot className="sticky bottom-0 z-10 font-black text-[10px] uppercase bg-indigo-50 text-indigo-700 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] border-t-2 border-indigo-100">
+                                    <tr>
+                                        <td className="p-4 sticky left-0 bg-indigo-50 border-r border-indigo-100">TOTALES GLOBALES</td>
+                                        {uniqueStates.map(state => (
+                                            <td key={state} className="p-3 text-center">
+                                                {totals[state] || 0}
+                                            </td>
+                                        ))}
+                                        <td className="p-4 text-right text-indigo-800 text-xs">
+                                            {totals.total}
+                                        </td>
+                                    </tr>
+                                </tfoot>
                             </table>
                         </div>
                     </div>
@@ -536,30 +624,28 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_fnz"
-                    titulo="Detalle FNZ"
-                    icono={Database}
+                    titulo="Detalles de registros FNZ"
                     canLoad={loadStep >= 1}
                     onLoadComplete={() => handleStepComplete(1)}
                 />
 
-                {/* 2. RETANQUEOS - AHORA CON FILTROS ACTIVADOS */}
+                {/* 2. RETANQUEOS */}
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_retanqueos"
-                    titulo="Detalle Retanqueos"
+                    titulo="Clientes potenciales para Retanqueos"
                     icono={RefreshCw}
                     canLoad={loadStep >= 2}
                     onLoadComplete={() => handleStepComplete(2)}
                     initialColumns={COLUMNAS_RETANQUEO_15} 
-                    // AQUÍ ESTÁ LA MAGIA: FILTROS ESPECÍFICOS SOLICITADOS
-                    filterableColumns={["Vendedor_Activo", "Nombre_Vendedor", "Regional_Venta"]}
+                    filterConfig={filtrosRetanqueo}
                 />
 
                 {/* 3. COSECHAS S1 */}
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_cosechas_s1"
-                    titulo="Cosechas: Sección 1 (Fallo 1ra Cuota)"
+                    titulo="alerta critica (Fallaron 1ra Cuota) "
                     icono={XCircle}
                     colorBadge="bg-red-50 text-red-600"
                     canLoad={loadStep >= 3}
@@ -571,7 +657,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_cosechas_s2"
-                    titulo="Cosechas: Sección 2 (Pago 1ra / Fallo 2da)"
+                    titulo="Riesgo alto: (Pago 1ra / Fallo 2da) "
                     icono={AlertTriangle}
                     colorBadge="bg-orange-50 text-orange-600"
                     canLoad={loadStep >= 4}
@@ -583,7 +669,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_cosechas_s3"
-                    titulo="Cosechas: Sección 3 (Fallo 3ra - 6ta)"
+                    titulo="seguimiento: (Fallo 3ra - 6ta)"
                     icono={TrendingUp}
                     colorBadge="bg-amber-50 text-amber-600"
                     canLoad={loadStep >= 5}
