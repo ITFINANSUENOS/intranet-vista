@@ -145,8 +145,8 @@ export default function Documents() {
                     </div>
                 )}
                 
-                {/* Header Principal */}
-                <header className="bg-white px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 z-40 h-auto md:h-20 gap-4 shadow-sm">
+                {/* Header Principal - Fijo arriba */}
+                <header className="bg-white px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 z-40 h-20 gap-4 shadow-sm">
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={() => setIsSidebarOpen(true)} 
@@ -183,7 +183,6 @@ export default function Documents() {
                                 </button>
                             ))}
                             
-                            {/* BOTÓN DETALLADOS (SIN ICONO) */}
                             <button 
                                 onClick={() => setActiveTab('detallados')} 
                                 className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
@@ -195,7 +194,6 @@ export default function Documents() {
                                 DETALLADOS
                             </button>
 
-                             {/* --- BOTÓN COMERCIAL (SIN ICONO) --- */}
                              <button 
                                 onClick={() => setActiveTab('comercial')} 
                                 className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
@@ -233,18 +231,35 @@ export default function Documents() {
                     </div>
                 </header>
 
-                <div className="flex flex-row flex-1 relative">
-                    <FilterSidebar 
-                        options={filterOptions} 
-                        selectedFilters={selectedFilters} 
-                        onFilterChange={handleFilterChange} 
-                        onClear={() => setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [] })} 
-                        isOpen={isSidebarOpen}
-                        onClose={() => setIsSidebarOpen(false)}
-                    />
+                {/* Contenedor del Cuerpo - items-start es VITAL para que el sticky funcione */}
+                <div className="flex flex-row flex-1 relative items-start">
                     
+                    {/* Sidebar de Filtros - Sticky para Desktop */}
+                    <aside className="hidden md:block sticky top-20 z-30 h-[calc(100vh-80px)] overflow-y-auto border-r border-slate-100 bg-white">
+                        <FilterSidebar 
+                            options={filterOptions} 
+                            selectedFilters={selectedFilters} 
+                            onFilterChange={handleFilterChange} 
+                            onClear={() => setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [] })} 
+                            isOpen={true} // Siempre abierto en desktop dentro del aside
+                            onClose={() => {}} 
+                        />
+                    </aside>
+
+                    {/* Sidebar para Móvil (Overlay) */}
+                    <div className="md:hidden">
+                        <FilterSidebar 
+                            options={filterOptions} 
+                            selectedFilters={selectedFilters} 
+                            onFilterChange={handleFilterChange} 
+                            onClear={() => setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [] })} 
+                            isOpen={isSidebarOpen}
+                            onClose={() => setIsSidebarOpen(false)}
+                        />
+                    </div>
+                    
+                    {/* Contenido Principal */}
                     <main className="flex-1 p-4 md:p-8 min-w-0 overflow-x-hidden">
-                        
                         {loading && activeTab !== 'detallados' && activeTab !== 'comercial' ? (
                             <div className="h-96 flex flex-col items-center justify-center bg-white rounded-[3rem] shadow-sm italic text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">
                                 <RefreshCw className="animate-spin text-indigo-600 mb-4" size={32} /> Cargando Tablero...
@@ -263,7 +278,6 @@ export default function Documents() {
                                     <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>
                                 )}
 
-                                {/* --- RENDERIZADO DETALLADOS (PERSISTENTE) --- */}
                                 <div className={activeTab === 'detallados' ? 'block' : 'hidden'}>
                                     <DatosDetallados 
                                         apiClient={apiClient} 
@@ -272,7 +286,6 @@ export default function Documents() {
                                     />
                                 </div>
 
-                                {/* --- RENDERIZADO COMERCIAL (PERSISTENTE - SE CARGA AL INICIO) --- */}
                                 <div className={activeTab === 'comercial' ? 'block' : 'hidden'}>
                                     <Comercial 
                                         apiClient={apiClient}
