@@ -11,7 +11,7 @@ export default function AuthenticatedLayout({ children, title }) {
     return (
         // [SOLUCIÓN 1]: Eliminé la clase 'flex'. 
         // Al ser un bloque normal, el margen restará espacio en lugar de empujar el contenido fuera.
-        <div className="min-h-screen bg-gray-100 overflow-x-hidden relative">
+        <div className="min-h-screen bg-gray-100 relative">
             
             {/* Sidebar (Posición Fixed, no afecta el flujo del bloque) */}
             <Sidebar /> 
