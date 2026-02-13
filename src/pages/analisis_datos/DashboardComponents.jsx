@@ -89,7 +89,6 @@ export const StackedBar = ({ data, keys, isCurrency }) => (
     </ResponsiveContainer>
 );
 
-// --- MODIFICACIÓN CLAVE: SIDEBAR RESPONSIVO CON PROPIEDADES DE APERTURA ---
 export const FilterSidebar = ({ options, selectedFilters, onFilterChange, onClear, isOpen, onClose }) => {
     const categories = [
         { key: 'Empresa', label: 'Empresa', icon: <Building2 size={14}/> },
@@ -101,50 +100,68 @@ export const FilterSidebar = ({ options, selectedFilters, onFilterChange, onClea
 
     return (
         <>
-            {/* Overlay para móvil */}
+            {/* Overlay oscuro para la versión móvil */}
             <div 
-                className={`fixed inset-0 bg-black/50 z-40 transition-opacity duration-300 md:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
+                className={`fixed inset-0 bg-slate-900/50 z-[60] backdrop-blur-sm transition-opacity duration-300 md:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
                 onClick={onClose}
             />
             
-            {/* Sidebar con clases condicionales para móvil vs escritorio */}
-            <aside className={`
-                fixed md:sticky top-0 md:top-20 left-0 h-full md:h-[calc(100vh-80px)] 
-                w-72 bg-white border-r border-slate-100 overflow-y-auto p-6 
-                flex flex-col gap-8 shrink-0 shadow-2xl md:shadow-sm z-50 
-                transition-transform duration-300 ease-in-out
+            {/* Contenedor principal del sidebar */}
+            <div className={`
+                bg-white flex flex-col h-full 
+                fixed md:relative top-0 left-0 z-[70] md:z-auto
+                w-72 md:w-full
+                transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
                 ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
             `}>
-                <div className="flex items-center justify-between border-b pb-4">
+                
+                {/* Cabecera del filtro (sticky para que no se pierda al hacer scroll interno) */}
+                <div className="flex items-center justify-between border-b border-slate-100 p-6 shrink-0 bg-white sticky top-0 z-20">
                     <div className="flex items-center gap-2">
                         <Filter size={16} className="text-indigo-600" />
                         <h2 className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">Filtros Operativos</h2>
                     </div>
-                    <div className="flex gap-4">
-                        <button onClick={onClear} className="text-[9px] font-bold text-red-500 hover:underline uppercase">Limpiar</button>
-                        {/* Botón de cerrar solo en móvil */}
-                        <button onClick={onClose} className="md:hidden text-slate-400 hover:text-slate-600">
+                    <div className="flex items-center gap-4">
+                        <button onClick={onClear} className="text-[9px] font-bold text-red-500 hover:text-red-600 hover:underline uppercase transition-all">Limpiar</button>
+                        <button onClick={onClose} className="md:hidden text-slate-400 hover:text-slate-600 bg-slate-50 p-1.5 rounded-lg">
                             <X size={16} />
                         </button>
                     </div>
                 </div>
-                {categories.map((cat) => (
-                    <div key={cat.key} className="space-y-3">
-                        <div className="flex items-center gap-2 text-slate-400">
-                            {cat.icon}
-                            <h3 className="text-[10px] font-black uppercase tracking-widest">{cat.label}</h3>
+
+                {/* Contenedor de filtros (sin overflow aquí en desktop, el padre lo maneja) */}
+                <div className="flex-1 p-6 space-y-8 pb-24 overflow-y-auto md:overflow-visible">
+                    {categories.map((cat) => (
+                        <div key={cat.key} className="space-y-4">
+                            <div className="flex items-center gap-2 text-slate-400 border-b border-slate-50 pb-2 sticky top-0 bg-white z-10">
+                                {cat.icon}
+                                <h3 className="text-[10px] font-black uppercase tracking-widest">{cat.label}</h3>
+                            </div>
+                            <div className="space-y-2.5">
+                                {options[cat.key]?.map((opt) => (
+                                    <label key={opt} className="flex items-center gap-3 group cursor-pointer">
+                                        <div className="relative flex items-center justify-center">
+                                            <input 
+                                                type="checkbox" 
+                                                className="peer w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600/20 cursor-pointer transition-all" 
+                                                checked={selectedFilters[cat.key]?.includes(opt)} 
+                                                onChange={() => onFilterChange(cat.key, opt)} 
+                                            />
+                                        </div>
+                                        <span className="text-[10px] font-bold text-slate-600 group-hover:text-slate-900 uppercase truncate transition-colors" title={opt || 'SIN DATO'}>
+                                            {opt || 'SIN DATO'}
+                                        </span>
+                                    </label>
+                                ))}
+                                
+                                {(!options[cat.key] || options[cat.key].length === 0) && (
+                                    <span className="text-[10px] text-slate-300 italic">No hay datos</span>
+                                )}
+                            </div>
                         </div>
-                        <div className="space-y-1.5 max-h-40 overflow-y-auto pr-2">
-                            {options[cat.key]?.map((opt) => (
-                                <label key={opt} className="flex items-center gap-3 group cursor-pointer">
-                                    <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-indigo-600" checked={selectedFilters[cat.key]?.includes(opt)} onChange={() => onFilterChange(cat.key, opt)} />
-                                    <span className="text-[10px] font-bold text-slate-600 uppercase truncate">{opt || 'SIN DATO'}</span>
-                                </label>
-                            ))}
-                        </div>
-                    </div>
-                ))}
-            </aside>
+                    ))}
+                </div>
+            </div>
         </>
     );
 };
@@ -336,7 +353,6 @@ export const GaugeWithDetailsCard = ({ title, value, meta, recaudo, faltante, is
     );
 };
 
-// --- COMPONENTE 2: MINI TABLAS DE ZONA (MODIFICADO: AÑADIDO TFOOT CON TOTALES) ---
 export const ZoneMiniTable = ({ title, data, count }) => {
     
     const { groupedData, totals } = useMemo(() => {
@@ -405,7 +421,8 @@ export const ZoneMiniTable = ({ title, data, count }) => {
                                                 <td className="p-3 text-[10px] font-black text-red-500 text-right font-mono">${(row.Faltante_Calc > 0 ? row.Faltante_Calc : 0).toLocaleString()}</td>
                                                 <td className="p-3 align-middle">
                                                     <div className="flex items-center gap-2 w-full justify-center">
-                                                        <span className="text-[10px] font-black w-8 text-right">{percent.toFixed(0)}%</span>
+                                                        {/* AQUÍ ESTÁ LA MODIFICACIÓN: toFixed(2) y w-10 */}
+                                                        <span className="text-[10px] font-black w-10 text-right">{percent.toFixed(2)}%</span>
                                                         <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
                                                             <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(percent, 100)}%` }}></div>
                                                         </div>
@@ -425,7 +442,7 @@ export const ZoneMiniTable = ({ title, data, count }) => {
                                 <td className="p-4 text-[11px] text-right font-mono text-red-400">${totals.faltante.toLocaleString()}</td>
                                 <td className="p-4">
                                     <div className="flex items-center gap-2 w-full justify-center">
-                                        <span className="text-[11px] font-black w-10 text-right">{totals.cumplimiento.toFixed(1)}%</span>
+                                        <span className="text-[11px] font-black w-10 text-right">{totals.cumplimiento.toFixed(2)}%</span>
                                         <div className="w-16 h-2 bg-slate-700 rounded-full overflow-hidden">
                                             <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${Math.min(totals.cumplimiento, 100)}%` }}></div>
                                         </div>
@@ -486,7 +503,7 @@ export const RankingTable = ({ data, title }) => {
                                     <td className="p-3 text-[10px] font-black text-red-500 text-right font-mono">${(row.Faltante_Calc > 0 ? row.Faltante_Calc : 0).toLocaleString()}</td>
                                     <td className="p-3 align-middle">
                                         <div className="flex items-center gap-2 w-full">
-                                            <span className="text-[10px] font-black w-8 text-right">{cump.toFixed(0)}%</span>
+                                            <span className="text-[10px] font-black w-8 text-right">{cump.toFixed(2)}%</span>
                                             <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                                                 <div className={`h-full rounded-full ${getProgressColor(cump)}`} style={{ width: `${Math.min(cump, 100)}%` }}></div>
                                             </div>
