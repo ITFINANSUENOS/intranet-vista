@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import AuthenticatedLayout from '../../layouts/AuthenticatedLayout';
 import { useAuth } from '../../context/AuthContext';
-// Se eliminaron FileText y ShoppingBag de los imports ya que no se usan
 import { RefreshCw, CheckCircle2, Activity, AlertTriangle, X, Filter as FilterIcon } from 'lucide-react';
 
-// Importamos los componentes locales
 import { FilterSidebar } from './DashboardComponents';
 import Cartera from './Cartera';
 import Seguirientos from './Seguimientos';
@@ -12,17 +10,14 @@ import Resultados from './Resultados';
 import DatosDetallados from './DatosDetallados';
 import Comercial from './Comercial'; 
 
-// Importación del botón
 import FileUploadButton from '../../components/FileUploadButton'; 
 
 export default function Documents() {
     const { apiClient, permissions = [], user } = useAuth();
     const userPermissions = permissions.length > 0 ? permissions : (user?.permissions || []);
 
-    // Estado de la pestaña activa
     const [activeTab, setActiveTab] = useState('cartera'); 
     
-    // Estados generales
     const [loading, setLoading] = useState(false);
     const [selectedJobId, setSelectedJobId] = useState(null);
     const [moduleData, setModuleData] = useState({ 
@@ -34,7 +29,6 @@ export default function Documents() {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [notification, setNotification] = useState(null);
 
-    // Filtros seleccionados
     const [selectedFilters, setSelectedFilters] = useState({ 
         Empresa: [], 
         CALL_CENTER_FILTRO: [], 
@@ -43,7 +37,6 @@ export default function Documents() {
         Franja_Cartera: [] 
     });
     
-    // --- 1. Obtener ID del Reporte Activo ---
     useEffect(() => {
         apiClient.get('/reportes/activo')
             .then((response) => {
@@ -53,20 +46,15 @@ export default function Documents() {
 
                 if (id) {
                     setSelectedJobId(id);
-                } else {
-                    console.error("No se encontró active_job_id en la respuesta", data);
                 }
             })
             .catch(err => console.error("Error al obtener reporte activo:", err));
-    }, [apiClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); 
 
-    // --- 2. Cargar datos de las gráficas (Cartera, Seguimientos, Resultados) ---
     useEffect(() => {
         if (selectedJobId) {
-            // No mostramos loading si navegamos a pestañas que tienen su propia carga (Detallados/Comercial)
-            if (activeTab !== 'detallados' && activeTab !== 'comercial') {
-                setLoading(true);
-            }
+            setLoading(true);
             
             const query = `?job_id=${selectedJobId}`;
             
@@ -77,34 +65,27 @@ export default function Documents() {
             ])
             .then(([resC, resS, resR]) => { 
                 setModuleData({ 
-                    cartera:      resC.data?.data?.data || resC.data?.data, 
-                    seguimientos: resS.data?.data?.data || resS.data?.data,
-                    resultados:   resR.data?.data?.data || resR.data?.data 
+                    cartera:      resC.data?.data?.data || resC.data?.data || resC.data, 
+                    seguimientos: resS.data?.data?.data || resS.data?.data || resS.data,
+                    resultados:   resR.data?.data?.data || resR.data?.data || resR.data 
                 }); 
                 setLoading(false); 
             })
             .catch((err) => {
-                console.error("Error cargando datos de gráficas:", err);
+                console.error("Error cargando datos:", err);
                 setLoading(false);
             });
         }
-    }, [selectedJobId, apiClient]); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedJobId]); 
 
-    // --- Callbacks de Carga de Archivo ---
-    const handleUploadStart = () => {
-         setNotification({ type: 'success', message: 'Iniciando carga...' });
-    };
-
+    const handleUploadStart = () => setNotification({ type: 'success', message: 'Iniciando carga...' });
     const handleUploadSuccess = (jobId) => {
         setSelectedJobId(jobId);
         setNotification({ type: 'success', message: 'Reporte procesado correctamente' });
     };
+    const handleUploadError = (errorMessage) => setNotification({ type: 'error', message: errorMessage });
 
-    const handleUploadError = (errorMessage) => {
-        setNotification({ type: 'error', message: errorMessage });
-    };
-
-    // --- Opciones de Filtros Dinámicos ---
     const filterOptions = useMemo(() => {
         const raw = moduleData.cartera;
         const rawSeg = moduleData.seguimientos;
@@ -134,19 +115,19 @@ export default function Documents() {
 
     return (
         <AuthenticatedLayout title="Panel Cartera">
-            <div className="min-h-screen bg-slate-50 flex flex-col">
+            <div className="min-h-screen bg-slate-50 flex flex-col relative">
                 
                 {/* Notificaciones Flotantes */}
                 {notification && (
-                    <div className="fixed top-6 right-6 z-50 flex items-center gap-3 bg-white border p-4 rounded-2xl shadow-xl animate-in slide-in-from-right duration-300">
+                    <div className="fixed top-6 right-6 z-[100] flex items-center gap-3 bg-white border p-4 rounded-2xl shadow-xl animate-in slide-in-from-right duration-300">
                         {notification.type === 'success' ? <CheckCircle2 className="text-emerald-500" size={20} /> : <AlertTriangle className="text-red-500" size={20} />}
                         <span className="text-[10px] font-black uppercase text-slate-700">{notification.message}</span>
                         <X size={14} className="cursor-pointer text-slate-400 hover:text-slate-600" onClick={() => setNotification(null)}/>
                     </div>
                 )}
                 
-                {/* Header Principal - Fijo arriba */}
-                <header className="bg-white px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 z-40 h-20 gap-4 shadow-sm">
+                {/* HEADER FIJO - CORREGIDO: z-30 en lugar de z-[60] para no tapar el Sidebar principal */}
+                <header className="bg-white px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 z-30 h-20 gap-4 shadow-sm">
                     <div className="flex items-center gap-3">
                         <button 
                             onClick={() => setIsSidebarOpen(true)} 
@@ -166,7 +147,6 @@ export default function Documents() {
                         </div>
                     </div>
                     
-                    {/* Barra de Navegación (Pestañas) */}
                     <div className="flex items-center gap-4 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
                         <div className="flex bg-slate-100 p-1 rounded-xl shrink-0 items-center">
                             {['cartera', 'seguimientos', 'resultados'].map(tab => (
@@ -174,79 +154,49 @@ export default function Documents() {
                                     key={tab} 
                                     onClick={() => setActiveTab(tab)} 
                                     className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
-                                        activeTab === tab 
-                                        ? 'bg-white text-indigo-600 shadow-sm' 
-                                        : 'text-slate-400 hover:text-slate-600'
+                                        activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
                                     }`}
                                 >
                                     {tab.toUpperCase()}
                                 </button>
                             ))}
-                            
-                            <button 
-                                onClick={() => setActiveTab('detallados')} 
-                                className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
-                                    activeTab === 'detallados' 
-                                    ? 'bg-white text-indigo-600 shadow-sm' 
-                                    : 'text-slate-400 hover:text-slate-600'
-                                }`}
-                            >
-                                DETALLADOS
-                            </button>
-
-                             <button 
-                                onClick={() => setActiveTab('comercial')} 
-                                className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
-                                    activeTab === 'comercial' 
-                                    ? 'bg-white text-indigo-600 shadow-sm' 
-                                    : 'text-slate-400 hover:text-slate-600'
-                                }`}
-                            >
-                                COMERCIAL
-                            </button>
+                            <button onClick={() => setActiveTab('detallados')} className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${activeTab === 'detallados' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>DETALLADOS</button>
+                            <button onClick={() => setActiveTab('comercial')} className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${activeTab === 'comercial' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>COMERCIAL</button>
                         </div>
 
                         {userPermissions.includes('general_report') && (
                             <>
                                 <div className="hidden md:block">
-                                    <FileUploadButton 
-                                        apiClient={apiClient}
-                                        onUploadStart={handleUploadStart}
-                                        onUploadSuccess={handleUploadSuccess}
-                                        onUploadError={handleUploadError}
-                                    />
+                                    <FileUploadButton apiClient={apiClient} onUploadStart={handleUploadStart} onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} />
                                 </div>
                                 <div className="md:hidden">
-                                    <FileUploadButton 
-                                        apiClient={apiClient}
-                                        onUploadStart={handleUploadStart}
-                                        onUploadSuccess={handleUploadSuccess}
-                                        onUploadError={handleUploadError}
-                                        iconOnly={true}
-                                        className="bg-indigo-600 text-white p-2 rounded-xl"
-                                    />
+                                    <FileUploadButton apiClient={apiClient} onUploadStart={handleUploadStart} onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} iconOnly={true} className="bg-indigo-600 text-white p-2 rounded-xl" />
                                 </div>
                             </>
                         )}
                     </div>
                 </header>
 
-                {/* Contenedor del Cuerpo - items-start es VITAL para que el sticky funcione */}
-                <div className="flex flex-row flex-1 relative items-start">
+                {/* CONTENEDOR PRINCIPAL - Flex Row con items-stretch para el Sticky Infalible */}
+                <div className="flex flex-row flex-1 w-full relative items-stretch">
                     
-                    {/* Sidebar de Filtros - Sticky para Desktop */}
-                    <aside className="hidden md:block sticky top-20 z-30 h-[calc(100vh-80px)] overflow-y-auto border-r border-slate-100 bg-white">
-                        <FilterSidebar 
-                            options={filterOptions} 
-                            selectedFilters={selectedFilters} 
-                            onFilterChange={handleFilterChange} 
-                            onClear={() => setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [] })} 
-                            isOpen={true} // Siempre abierto en desktop dentro del aside
-                            onClose={() => {}} 
-                        />
+                    {/* LA PISTA (TRACK) */}
+                    <aside className="hidden md:block w-72 shrink-0 border-r border-slate-100 bg-white relative">
+                        
+                        {/* EL CARRITO (STICKY) - CORREGIDO: z-20 para mantenerse por debajo de tu menú principal */}
+                        <div className="sticky top-20 h-[calc(100vh-80px)] overflow-y-auto w-full z-20 scrollbar-thin">
+                            <FilterSidebar 
+                                options={filterOptions} 
+                                selectedFilters={selectedFilters} 
+                                onFilterChange={handleFilterChange} 
+                                onClear={() => setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [] })} 
+                                isOpen={true} 
+                                onClose={() => {}} 
+                            />
+                        </div>
                     </aside>
 
-                    {/* Sidebar para Móvil (Overlay) */}
+                    {/* Sidebar para Móvil */}
                     <div className="md:hidden">
                         <FilterSidebar 
                             options={filterOptions} 
@@ -258,40 +208,23 @@ export default function Documents() {
                         />
                     </div>
                     
-                    {/* Contenido Principal */}
-                    <main className="flex-1 p-4 md:p-8 min-w-0 overflow-x-hidden">
+                    {/* CONTENIDO PRINCIPAL */}
+                    <main className="flex-1 min-w-0 p-4 md:p-8">
                         {loading && activeTab !== 'detallados' && activeTab !== 'comercial' ? (
                             <div className="h-96 flex flex-col items-center justify-center bg-white rounded-[3rem] shadow-sm italic text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">
                                 <RefreshCw className="animate-spin text-indigo-600 mb-4" size={32} /> Cargando Tablero...
                             </div>
                         ) : (
-                            <div className="space-y-12">
-                                {activeTab === 'cartera' && moduleData.cartera && (
-                                    <Cartera data={moduleData.cartera} selectedFilters={selectedFilters} />
-                                )}
+                            <div className="space-y-12 pb-10">
+                                {activeTab === 'cartera' && moduleData.cartera && <Cartera data={moduleData.cartera} selectedFilters={selectedFilters} />}
+                                {activeTab === 'seguimientos' && moduleData.seguimientos && <Seguirientos data={moduleData.seguimientos} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId} />}
+                                {activeTab === 'resultados' && moduleData.resultados && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
                                 
-                                {activeTab === 'seguimientos' && moduleData.seguimientos && (
-                                    <Seguirientos data={moduleData.seguimientos} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId} />
-                                )}
-
-                                {activeTab === 'resultados' && moduleData.resultados && (
-                                    <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>
-                                )}
-
                                 <div className={activeTab === 'detallados' ? 'block' : 'hidden'}>
-                                    <DatosDetallados 
-                                        apiClient={apiClient} 
-                                        jobId={selectedJobId} 
-                                        selectedFilters={selectedFilters} 
-                                    />
+                                    <DatosDetallados apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />
                                 </div>
-
                                 <div className={activeTab === 'comercial' ? 'block' : 'hidden'}>
-                                    <Comercial 
-                                        apiClient={apiClient}
-                                        jobId={selectedJobId}
-                                        selectedFilters={selectedFilters}
-                                    />
+                                    <Comercial apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />
                                 </div>
                             </div>
                         )}
