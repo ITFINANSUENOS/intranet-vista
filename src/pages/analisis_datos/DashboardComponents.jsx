@@ -80,6 +80,7 @@ const CustomXAxisTick = ({ x, y, payload }) => {
 
 // --- 3. ETIQUETAS DENTRO DE LAS BARRAS ---
 export const CustomBarLabel = (props) => {
+    
     const { x, y, width, height, value, isCurrency } = props;
     if (typeof x !== 'number' || typeof y !== 'number' || width < 0 || height < 0) return null;
 
@@ -95,6 +96,7 @@ export const CustomBarLabel = (props) => {
         
     return (
         <text 
+            
             x={x + width / 2} 
             y={y + height / 2} 
             fill="#ffffff" 
@@ -131,7 +133,7 @@ export const TotalTopLabel = (props) => {
             textAnchor="middle"
             style={{ pointerEvents: 'none', letterSpacing: '0.2px' }}
         >
-            {displayValue}
+            { displayValue}
         </text>
     );
 };
@@ -164,14 +166,14 @@ export const StackedBar = React.memo(({ data, keys, isCurrency, getSafeColor }) 
                 />
                 
                 <Tooltip 
+                    separator={" : \u00A0\u00A0\u00A0 "} /* <--- PEGA ESTA LÍNEA AQUÍ TAMBIÉN */
                     cursor={{ fill: '#ffffff', opacity: 0.05 }}
                     contentStyle={{ 
-                        backgroundColor: '#0f172a', 
-                        borderRadius: '12px', 
-                        border: '1px solid #1e293b',
-                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)'
+                    backgroundColor: '#0f172a', 
+                    borderRadius: '12px', 
+                    border: '1px solid #1e293b',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)'
                     }}
-                    formatter={(val) => isCurrency ? `$${val.toLocaleString('es-CO')}` : val.toLocaleString('es-CO')}
                 />
                 
                 <Legend verticalAlign="top" align="center" iconType="circle" wrapperStyle={{paddingBottom: '20px', fontSize: '10px'}} />

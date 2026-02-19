@@ -153,19 +153,31 @@ export default function Sidebar() {
                 onMouseEnter={() => setIsCollapsed(false)}
                 onMouseLeave={() => setIsCollapsed(true)}
             >
-                <div className="p-6 flex justify-center items-center border-b border-white/5 flex-shrink-0 relative">
-                    <img 
-                        src="/images/logos/logo.png" 
-                        alt="Logo" 
-                        className={`object-contain transition-all duration-500 drop-shadow-[0_0_8px_rgba(255,255,246,0.3)] ${isCollapsed ? 'md:w-12' : 'w-40'}`} 
-                    />
+                {/* --- SECCIÓN DEL LOGO MODIFICADA --- */}
+                <div className="p-4 md:p-6 flex justify-center items-center border-b border-white/5 flex-shrink-0 relative min-h-[100px]">
+                    <div className={`
+                        flex items-center justify-center transition-all duration-500 ease-in-out
+                        ${!isCollapsed 
+                            ? 'bg-white/5 backdrop-blur-md p-3 md:p-4 rounded-2xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.15)] w-full' 
+                            : 'p-1'
+                        }
+                    `}>
+                        <img 
+                            src="/images/logos/logo.png" 
+                            alt="Logo" 
+                            className={`object-contain transition-all duration-500 drop-shadow-[0_0_12px_rgba(255,255,255,0.2)] 
+                            ${isCollapsed ? 'md:w-14 w-12' : 'w-48'}`} 
+                        />
+                    </div>
+                    
                     <button 
                         onClick={() => setIsMobileOpen(false)}
-                        className="absolute right-4 top-6 md:hidden text-gray-400 hover:text-red-400"
+                        className="absolute right-4 top-6 md:hidden text-gray-400 hover:text-red-400 bg-black/20 p-1.5 rounded-lg backdrop-blur-sm border border-white/5"
                     >
                         <XMarkIcon className="w-6 h-6" />
                     </button>
                 </div>
+                {/* --- FIN DE LA SECCIÓN DEL LOGO --- */}
 
                 <nav className="flex-grow space-y-3 overflow-y-auto overflow-x-hidden p-4 scrollbar-hide mt-4">
                     {canAccess(user, 'view_dashboard') && (
