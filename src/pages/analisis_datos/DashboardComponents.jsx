@@ -1,170 +1,315 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
-    PieChart, Pie, Cell, Label, Customized
+   BarChart, ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
+    PieChart, Pie, Cell, Customized, LabelList 
 } from 'recharts';
 import { 
-    Search, Filter, ChevronDown, ChevronUp, Columns, ArrowLeftCircle, Building2, MapPin, Layers, Target, Trophy, ChevronLeft, ChevronRight, X
+    Search, Filter, ChevronDown, ChevronUp, Columns, ArrowLeftCircle, Building2, MapPin, Layers, Target, Trophy, ChevronLeft, ChevronRight, X, AlertCircle
 } from 'lucide-react';
 
 export const COLOR_MAP = {
-    // ESTADOS DE GESTIÓN (Prioridad: Diferenciación visual en gráficas apiladas)
-    'APROBADO': '#059669',      // Emerald 600 (Éxito fuerte)
-    'VIABILIZADO': '#10b981',   // Emerald 500 (Éxito medio)
-    'PAGO': '#10b981',          // Emerald 500
+    'APROBADO': '#059669', 'VIABILIZADO': '#10b981', 'PAGO': '#10b981',          
+    'RECHAZADO': '#dc2626', 'ANULADO': '#ef4444', 'NEGADO': '#b91c1c', 'SIN PAGO': '#ef4444',      
+    'STAND BY': '#d97706', 'PENDIENTE': '#f59e0b',     
+    'EN PROCESO': '#2563eb', 'TRAMITE': '#3b82f6',       
+    'DEVUELTO': '#8b5cf6', 'SUBSANAR': '#a855f7',      
+    'RADICADO': '#0891b2', 'LEGALIZADO': '#0284c7',    
     
-    'RECHAZADO': '#dc2626',     // Red 600 (Error fuerte)
-    'ANULADO': '#ef4444',       // Red 500
-    'NEGADO': '#b91c1c',        // Red 700
-    'SIN PAGO': '#ef4444',      // Red 500
+    'VIGENTES': '#16a34a', 'DIAS 1-10': '#86efac', 'DIAS 11-20': '#4ade80',        
+    'DIAS 21+': '#22c55e', 'VIGENCIA EXPIRADA': '#f43f5e', 
     
-    'STAND BY': '#d97706',      // Amber 600 (Advertencia visible)
-    'PENDIENTE': '#f59e0b',     // Amber 500
-    'EN PROCESO': '#2563eb',    // Blue 600 (Proceso activo)
-    'TRAMITE': '#3b82f6',       // Blue 500
-    
-    'DEVUELTO': '#8b5cf6',      // Violet 500 (Diferente a rojo/azul)
-    'SUBSANAR': '#a855f7',      // Purple 500
-    
-    'RADICADO': '#0891b2',      // Cyan 600
-    'LEGALIZADO': '#0284c7',    // Sky 600
-    
-    // ESTADOS DE CARTERA / TIEMPO (Gradientes lógicos)
-    'VIGENTES': '#16a34a',          // Green 600
-    'DIAS 1-10': '#86efac',         // Green 300
-    'DIAS 11-20': '#4ade80',        // Green 400
-    'DIAS 21+': '#22c55e',          // Green 500
-    
-    'VIGENCIA EXPIRADA': '#f43f5e', // Rose 500
-    
-    // RANGOS DE MORA (Semáforo)
-    '1 A 30': '#facc15',    // Yellow 400
-    '31 A 90': '#fb923c',   // Orange 400
-    '91 A 180': '#f87171',  // Red 400
-    '181 A 360': '#c084fc', // Purple 400
-    'MAYOR A 360': '#6366f1', // Indigo 500
+    '1 A 30': '#3b82f6', 'FRANJA 1 A 30': '#3b82f6', '1-30': '#3b82f6', '1 - 30': '#3b82f6',
+    '31 A 90': '#10b981', 'FRANJA 31 A 90': '#10b981', '31-90': '#10b981', '31 - 90': '#10b981',
+    '91 A 180': '#f59e0b', 'FRANJA 91 A 180': '#f59e0b', '91-180': '#f59e0b', '91 - 180': '#f59e0b',
+    '181 A 360': '#ef4444', 'FRANJA 181 A 360': '#ef4444', '181-360': '#ef4444', '181 - 360': '#ef4444',
+    'MAYOR A 360': '#8b5cf6', 'FRANJA MAYOR A 360': '#8b5cf6', '>360': '#8b5cf6', '> 360': '#8b5cf6', '360 +': '#8b5cf6', '360+': '#8b5cf6', 'MÁS DE 360': '#8b5cf6', 'MAS DE 360': '#8b5cf6',
 
-    // GESTIÓN CALL CENTER
-    'SIN GESTIÓN': '#94a3b8',      // Slate 400 (Neutral)
-    'CON GESTIÓN': '#0d9488',      // Teal 600
-    'CALL CENTER': '#6366f1',      // Indigo 500
-    'COBRANZA': '#84cc16',         // Lime 500
-    'OTROS': '#cbd5e1',            // Slate 300
-    
-    // CUMPLIMIENTO
-    'TOTAL': '#0f172a',            // Slate 900 (Negro suave)
-    'CUMPLIMIENTO_BAJO': '#ef4444',
-    'CUMPLIMIENTO_MEDIO': '#eab308',
-    'CUMPLIMIENTO_ALTO': '#22c55e',
+    'SIN GESTIÓN': '#94a3b8', 'CON GESTIÓN': '#0d9488', 'CALL CENTER': '#6366f1',      
+    'COBRANZA': '#84cc16', 'OTROS': '#cbd5e1', 'TOTAL': '#0f172a'
 };
 
-// Paleta por defecto robusta (12 colores distintos) para datos sin mapeo
 export const DEFAULT_COLORS = [
-    '#2563eb', // Blue
-    '#dc2626', // Red
-    '#16a34a', // Green
-    '#d97706', // Amber
-    '#7c3aed', // Violet
-    '#0891b2', // Cyan
-    '#db2777', // Pink
-    '#65a30d', // Lime
-    '#475569', // Slate
-    '#ea580c', // Orange
-    '#059669', // Emerald
-    '#4f46e5'  // Indigo
+    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', 
+    '#0ea5e9', '#ec4899', '#84cc16', '#64748b', '#f97316'
 ];
 
-// --- COMPONENTES VISUALES ---
+export const getSafeColor = (key) => {
+    if (!key) return DEFAULT_COLORS[0];
+    const normalizedKey = String(key).toUpperCase().replace(/\s+/g, ' ').trim();
+    if (COLOR_MAP[normalizedKey]) return COLOR_MAP[normalizedKey];
 
-export const StackedBar = ({ data, keys, isCurrency }) => (
-    <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ left: -10, bottom: 45, right: 10 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-            <XAxis dataKey="name" tick={{fontSize: 8, fontWeight: 800, fill: '#94a3b8'}} axisLine={false} tickLine={false} interval={0} angle={-45} textAnchor="end" height={70} />
-            <YAxis tick={{fontSize: 9, fill: '#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={(v) => isCurrency ? `$${(v/1000000).toFixed(0)}M` : v.toLocaleString()} />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{fontSize: '9px', fontWeight: '800', paddingBottom: '20px'}} />
-            {keys.map((k, i) => <Bar key={k} dataKey={k} stackId="a" fill={COLOR_MAP[k.toUpperCase()] || DEFAULT_COLORS[i % DEFAULT_COLORS.length]} barSize={30} />)}
-        </BarChart>
-    </ResponsiveContainer>
-);
+    let hash = 0;
+    for (let i = 0; i < normalizedKey.length; i++) {
+        hash = normalizedKey.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const stableIndex = Math.abs(hash) % DEFAULT_COLORS.length;
+    return DEFAULT_COLORS[stableIndex];
+};
 
-export const FilterSidebar = ({ options, selectedFilters, onFilterChange, onClear, isOpen, onClose }) => {
-    const categories = [
-        { key: 'Empresa', label: 'Empresa', icon: <Building2 size={14}/> },
-        { key: 'CALL_CENTER_FILTRO', label: 'Call Center', icon: <Target size={14}/> },
-        { key: 'Zona', label: 'Zona', icon: <MapPin size={14}/> },
-        { key: 'Regional_Cobro', label: 'Regional Cobro', icon: <MapPin size={14}/> },
-        { key: 'Franja_Cartera', label: 'Franja Cartera', icon: <Layers size={14}/> }
-    ];
+const formatCompactNumber = (number) => {
+    if (number < 1000) return number.toFixed(0);
+    if (number >= 1000 && number < 1000000) return (number / 1000).toFixed(1) + "K";
+    if (number >= 1000000 && number < 1000000000) return (number / 1000000).toFixed(1) + "M";
+    if (number >= 1000000000) return (number / 1000000000).toFixed(2) + "B";
+    return number;
+};
+
+// --- 2. ETIQUETA PERSONALIZADA PARA EL EJE X (HORIZONTAL Y SIN AMONTONARSE) ---
+const CustomXAxisTick = ({ x, y, payload }) => {
+    const text = payload.value;
+    // Si el texto tiene más de 12 caracteres, lo cortamos y añadimos "..." para que no choque
+    const truncatedText = text.length > 12 ? `${text.substring(0, 12)}...` : text;
+    
+    return (
+        <g transform={`translate(${x},${y})`}>
+            <text 
+                x={0} 
+                y={0} 
+                dy={12} // Distancia desde la línea del eje
+                textAnchor="middle" // Centrado perfecto y horizontal
+                fill="#94a3b8" 
+                fontSize="10px" 
+                fontWeight="700"
+                fontFamily="system-ui, sans-serif"
+            >
+                {truncatedText}
+            </text>
+        </g>
+    );
+};
+
+// --- 3. ETIQUETAS DENTRO DE LAS BARRAS ---
+export const CustomBarLabel = (props) => {
+    const { x, y, width, height, value, isCurrency } = props;
+    if (typeof x !== 'number' || typeof y !== 'number' || width < 0 || height < 0) return null;
+
+    let numericValue = Array.isArray(value) ? Number(value[1]) - Number(value[0]) : Number(value);
+    
+    // Si la barra es muy pequeña, no renderizamos texto para no saturar
+    if (isNaN(numericValue) || numericValue <= 0 || height < 15) return null;
+
+    // Lógica clave: Si es moneda (desembolso) abreviamos, si no (los demás), mostramos completo
+    const displayValue = isCurrency 
+        ? `$${formatCompactNumber(numericValue)}` 
+        : numericValue.toLocaleString('es-CO'); 
+        
+    return (
+        <text 
+            x={x + width / 2} 
+            y={y + height / 2} 
+            fill="#ffffff" 
+            fontSize="9px" 
+            fontFamily="system-ui, sans-serif" 
+            fontWeight="800" 
+            textAnchor="middle" 
+            dominantBaseline="central"
+            style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.6)', pointerEvents: 'none' }}
+        >
+            {displayValue}
+        </text>
+    );
+};
+
+// --- 4. ETIQUETA TOTAL EN LA PARTE SUPERIOR ---
+export const TotalTopLabel = (props) => {
+    const { x, y, value, isCurrency } = props;
+    if (!value || value <= 0) return null;
+    
+    // Lógica clave: Igual que arriba, respetamos los totales completos en los otros gráficos
+    const displayValue = isCurrency 
+        ? `$${formatCompactNumber(value)}` 
+        : value.toLocaleString('es-CO');
+    
+    return (
+        <text 
+            x={x} 
+            y={y - 12} 
+            fill="#ffffff" 
+            fontSize="10px" 
+            fontFamily="system-ui, sans-serif" 
+            fontWeight="900" 
+            textAnchor="middle"
+            style={{ pointerEvents: 'none', letterSpacing: '0.2px' }}
+        >
+            {displayValue}
+        </text>
+    );
+};
+
+// --- 5. COMPONENTE PRINCIPAL DEL GRÁFICO ---
+export const StackedBar = React.memo(({ data, keys, isCurrency, getSafeColor }) => {
+    if (!data || data.length === 0) return null;
+
+    return (
+        <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ left: 10, bottom: 20, right: 10, top: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff" opacity={0.1} />
+                
+                {/* EJE X: Se le pasa el componente personalizado */}
+                <XAxis 
+                    dataKey="name" 
+                    axisLine={false} 
+                    tickLine={false}
+                    interval="preserveStartEnd" // Ayuda nativa de recharts para no encimar
+                    tick={<CustomXAxisTick />}
+                />
+                
+                {/* EJE Y: Condicionado también para abreviar solo dinero */}
+                <YAxis 
+                    tick={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                    width={50}
+                    tickFormatter={(v) => isCurrency ? `$${formatCompactNumber(v)}` : v.toLocaleString('es-CO')} 
+                />
+                
+                <Tooltip 
+                    cursor={{ fill: '#ffffff', opacity: 0.05 }}
+                    contentStyle={{ 
+                        backgroundColor: '#0f172a', 
+                        borderRadius: '12px', 
+                        border: '1px solid #1e293b',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)'
+                    }}
+                    formatter={(val) => isCurrency ? `$${val.toLocaleString('es-CO')}` : val.toLocaleString('es-CO')}
+                />
+                
+                <Legend verticalAlign="top" align="center" iconType="circle" wrapperStyle={{paddingBottom: '20px', fontSize: '10px'}} />
+                
+                {keys.map((k) => (
+                    <Bar key={k} dataKey={k} stackId="a" fill={getSafeColor ? getSafeColor(k) : "#3b82f6"} barSize={45}>
+                        <LabelList dataKey={k} content={<CustomBarLabel isCurrency={isCurrency} />} />
+                    </Bar>
+                ))}
+
+                <Line dataKey="total" stroke="transparent" dot={false} activeDot={false}>
+                    <LabelList dataKey="total" content={<TotalTopLabel isCurrency={isCurrency} />} />
+                </Line>
+            </ComposedChart>
+        </ResponsiveContainer>
+    );
+});
+
+const FILTER_CATEGORIES = [
+    { key: 'Empresa', label: 'Empresa', icon: <Building2 size={14}/> },
+    { key: 'CALL_CENTER_FILTRO', label: 'Call Center', icon: <Target size={14}/> },
+    { key: 'Zona', label: 'Zona', icon: <MapPin size={14}/> },
+    { key: 'Regional_Cobro', label: 'Regional Cobro', icon: <MapPin size={14}/> },
+    { key: 'Franja_Cartera', label: 'Franja Cartera', icon: <Layers size={14}/> },
+    { key: 'Novedades', label: 'Novedades', icon: <AlertCircle size={14}/> }
+];
+export const FilterSidebar = React.memo(({ options = {}, selectedFilters = {}, onFilterChange, onClear, isOpen, onClose }) => {
+    
+    // OPTIMIZACIÓN 3: Evaluación calculada para saber si hay *algún* filtro activo en todo el panel.
+    const hasAnyFilter = useMemo(() => {
+        return Object.values(selectedFilters).some(filterArray => filterArray && filterArray.length > 0);
+    }, [selectedFilters]);
 
     return (
         <>
-            {/* Overlay oscuro para la versión móvil */}
+            {/* Overlay oscuro de fondo */}
             <div 
-                className={`fixed inset-0 bg-slate-900/50 z-[60] backdrop-blur-sm transition-opacity duration-300 md:hidden ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
+                className={`fixed inset-0 bg-[#041830]/60 z-[60] backdrop-blur-sm transition-all duration-500 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} 
                 onClick={onClose}
             />
             
-            {/* Contenedor principal del sidebar */}
-            <div className={`
-                bg-white flex flex-col h-full 
-                fixed md:relative top-0 left-0 z-[70] md:z-auto
-                w-72 md:w-full
-                transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
-                ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-            `}>
+            {/* Contenedor principal del sidebar - DISEÑO PREMIUM */}
+            <div 
+                className={`
+                    flex flex-col h-full 
+                    fixed top-0 left-0 z-[70] 
+                    w-72 md:w-80
+                    transition-transform duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] 
+                    shadow-[20px_0_50px_rgba(0,0,0,0.6)]
+                    ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+                `}
+                style={{
+                    background: 'linear-gradient(145deg, rgba(4, 24, 48, 0.95) 0%, rgba(4, 24, 48, 0.7) 100%)',
+                    backdropFilter: 'blur(20px)',
+                    WebkitBackdropFilter: 'blur(20px)',
+                    borderRight: '1px solid rgba(255, 255, 255, 0.08)'
+                }}
+            >
                 
-                {/* Cabecera del filtro (sticky para que no se pierda al hacer scroll interno) */}
-                <div className="flex items-center justify-between border-b border-slate-100 p-6 shrink-0 bg-white sticky top-0 z-20">
-                    <div className="flex items-center gap-2">
-                        <Filter size={16} className="text-indigo-600" />
-                        <h2 className="text-[11px] font-black text-slate-800 uppercase tracking-tighter">Filtros Operativos</h2>
+                {/* Header Premium Flotante */}
+                <div className="flex items-center justify-between border-b border-white/10 p-6 shrink-0 sticky top-0 z-20"
+                     style={{ background: 'linear-gradient(to bottom, rgba(4, 24, 48, 0.95) 60%, rgba(4, 24, 48, 0) 100%)' }}>
+                    <div className="flex items-center gap-3">
+                        <div className="relative p-2 bg-white/10 rounded-xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)]">
+                            <Filter size={16} className="text-cyan-400" />
+                            {/* INDICADOR GLOBAL: Aparece si hay cualquier filtro activo */}
+                            {hasAnyFilter && (
+                                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-cyan-400 rounded-full border border-[#041830] shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+                            )}
+                        </div>
+                        <h2 className="text-[12px] font-black text-white uppercase tracking-wider drop-shadow-md">Filtros Operativos</h2>
                     </div>
                     <div className="flex items-center gap-4">
-                        <button onClick={onClear} className="text-[9px] font-bold text-red-500 hover:text-red-600 hover:underline uppercase transition-all">Limpiar</button>
-                        <button onClick={onClose} className="md:hidden text-slate-400 hover:text-slate-600 bg-slate-50 p-1.5 rounded-lg">
+                        <button onClick={onClear} className="text-[9px] font-bold text-red-400 hover:text-red-300 hover:scale-105 uppercase transition-all tracking-widest drop-shadow-sm">
+                            Limpiar
+                        </button>
+                        <button onClick={onClose} className="text-white/50 hover:text-white bg-white/5 hover:bg-white/15 p-1.5 rounded-lg transition-all active:scale-95 border border-white/5 shadow-sm">
                             <X size={16} />
                         </button>
                     </div>
                 </div>
 
-                {/* Contenedor de filtros (sin overflow aquí en desktop, el padre lo maneja) */}
-                <div className="flex-1 p-6 space-y-8 pb-24 overflow-y-auto md:overflow-visible">
-                    {categories.map((cat) => (
-                        <div key={cat.key} className="space-y-4">
-                            <div className="flex items-center gap-2 text-slate-400 border-b border-slate-50 pb-2 sticky top-0 bg-white z-10">
-                                {cat.icon}
-                                <h3 className="text-[10px] font-black uppercase tracking-widest">{cat.label}</h3>
-                            </div>
-                            <div className="space-y-2.5">
-                                {options[cat.key]?.map((opt) => (
-                                    <label key={opt} className="flex items-center gap-3 group cursor-pointer">
-                                        <div className="relative flex items-center justify-center">
-                                            <input 
-                                                type="checkbox" 
-                                                className="peer w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600/20 cursor-pointer transition-all" 
-                                                checked={selectedFilters[cat.key]?.includes(opt)} 
-                                                onChange={() => onFilterChange(cat.key, opt)} 
-                                            />
-                                        </div>
-                                        <span className="text-[10px] font-bold text-slate-600 group-hover:text-slate-900 uppercase truncate transition-colors" title={opt || 'SIN DATO'}>
-                                            {opt || 'SIN DATO'}
-                                        </span>
-                                    </label>
-                                ))}
+                {/* Contenido con Scrollbar Premium Integrada */}
+                <div className="flex-1 p-6 space-y-8 pb-24 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20">
+                    {FILTER_CATEGORIES.map((cat) => {
+                        const catOptions = cat.key === 'Novedades' 
+                            ? ['Con Novedad', 'Sin Novedad'] 
+                            : options[cat.key] || [];
+
+                        // Verificación rápida para saber si ESTA categoría específica tiene filtros
+                        const isCategoryActive = selectedFilters[cat.key]?.length > 0;
+
+                        return (
+                            <div key={cat.key} className="space-y-4">
+                                <div className="flex items-center gap-2 text-cyan-300/80 border-b border-white/10 pb-2 sticky top-0 z-10"
+                                     style={{ background: 'linear-gradient(to bottom, rgba(4, 24, 48, 1) 0%, rgba(4, 24, 48, 0.9) 100%)' }}>
+                                    <div className="relative">
+                                        {cat.icon}
+                                        {/* INDICADOR POR CATEGORÍA: Punto vibrante animado */}
+                                        {isCategoryActive && (
+                                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-cyan-400 rounded-full shadow-[0_0_5px_rgba(34,211,238,0.8)] animate-pulse" />
+                                        )}
+                                    </div>
+                                    <h3 className="text-[10px] font-black text-white/90 uppercase tracking-[0.2em]">{cat.label}</h3>
+                                </div>
                                 
-                                {(!options[cat.key] || options[cat.key].length === 0) && (
-                                    <span className="text-[10px] text-slate-300 italic">No hay datos</span>
-                                )}
+                                <div className="space-y-3">
+                                    {catOptions.map((opt) => (
+                                        <label key={opt} className="flex items-center gap-3 group cursor-pointer transition-transform hover:translate-x-1 duration-200">
+                                            <div className="relative flex items-center justify-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="peer w-4 h-4 rounded-md border-white/20 bg-[#041830]/50 text-cyan-500 focus:ring-cyan-500/50 focus:ring-offset-0 cursor-pointer transition-all shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)] checked:border-cyan-400 checked:bg-cyan-500 hover:border-white/40" 
+                                                    checked={selectedFilters[cat.key]?.includes(opt) || false} 
+                                                    onChange={() => onFilterChange(cat.key, opt)} 
+                                                />
+                                            </div>
+                                            <span className="text-[11px] font-semibold text-white/70 group-hover:text-white uppercase truncate transition-colors drop-shadow-md" title={opt || 'SIN DATO'}>
+                                                {opt || 'SIN DATO'}
+                                            </span>
+                                        </label>
+                                    ))}
+                                    
+                                    {catOptions.length === 0 && (
+                                        <div className="flex items-center gap-2 text-white/40 italic bg-white/5 p-3 rounded-xl border border-white/5 shadow-inner">
+                                            <AlertCircle size={14} />
+                                            <span className="text-[10px] font-medium tracking-wide">Sin datos disponibles</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         </>
     );
-};
+});
 
 export const LocalFilterSection = ({ title, configs, filters, onFilterChange, isOpen, onToggle }) => (
     <div className="mb-4 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -250,7 +395,6 @@ export const TableView = ({ data, columns, pagination, onPageChange, loading, ti
     </div>
 );
 
-// --- COMPONENTE 1: GAUGE ---
 const RADIAN = Math.PI / 180;
 
 export const GaugeWithDetailsCard = ({ title, value, meta, recaudo, faltante, isMain = false }) => {
@@ -421,7 +565,6 @@ export const ZoneMiniTable = ({ title, data, count }) => {
                                                 <td className="p-3 text-[10px] font-black text-red-500 text-right font-mono">${(row.Faltante_Calc > 0 ? row.Faltante_Calc : 0).toLocaleString()}</td>
                                                 <td className="p-3 align-middle">
                                                     <div className="flex items-center gap-2 w-full justify-center">
-                                                        {/* AQUÍ ESTÁ LA MODIFICACIÓN: toFixed(2) y w-10 */}
                                                         <span className="text-[10px] font-black w-10 text-right">{percent.toFixed(2)}%</span>
                                                         <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
                                                             <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(percent, 100)}%` }}></div>
@@ -457,13 +600,27 @@ export const ZoneMiniTable = ({ title, data, count }) => {
     );
 };
 
-export const RankingTable = ({ data, title }) => {
-    const [currentPage, setCurrentPage] = useState(1);
+export const RankingTable = ({ data = [], title }) => {
+    // 1. BLINDAJE: Garantizamos que data SIEMPRE sea un array para que no crashee con .slice() o .length
+    const safeData = Array.isArray(data) ? data : [];
+    
+    const [currentPage, setCurrentPage] = React.useState(1);
     const rowsPerPage = 10;
-    const indexOfLastRow = currentPage * rowsPerPage;
+
+    // 2. BLINDAJE: Si los datos cambian (ej. al aplicar un filtro), reseteamos a la página 1 
+    // para evitar quedar "atrapados" en una página que ya no existe.
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [safeData.length]);
+
+    const totalPages = Math.max(1, Math.ceil(safeData.length / rowsPerPage));
+    
+    // 3. BLINDAJE: Aseguramos que la página actual nunca sea mayor al total de páginas
+    const validPage = Math.min(Math.max(1, currentPage), totalPages);
+    
+    const indexOfLastRow = validPage * rowsPerPage;
     const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-    const currentRows = data.slice(indexOfFirstRow, indexOfLastRow);
-    const totalPages = Math.ceil(data.length / rowsPerPage);
+    const currentRows = safeData.slice(indexOfFirstRow, indexOfLastRow);
 
     const getProgressColor = (val) => {
         if (val < 40) return 'bg-red-500';
@@ -491,35 +648,57 @@ export const RankingTable = ({ data, title }) => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                        {currentRows.map((row, idx) => {
-                            const cump = parseFloat(row['Cumplimiento_%'] || 0);
-                            return (
-                                <tr key={idx} className="hover:bg-indigo-50/30 transition-colors group">
-                                    <td className="p-3 text-[10px] font-bold text-slate-500 uppercase">{row.Regional_Cobro}</td>
-                                    <td className="p-3 text-[11px] font-black text-slate-700">{row.Zona}</td>
-                                    <td className="p-3 text-[10px] font-bold text-slate-600 uppercase">{row.Cobrador}</td>
-                                    <td className="p-3 text-[10px] font-semibold text-slate-500 text-right font-mono">${(row.Meta_Total || 0).toLocaleString()}</td>
-                                    <td className="p-3 text-[10px] font-bold text-slate-700 text-right font-mono">${(row.Recaudo_Total || 0).toLocaleString()}</td>
-                                    <td className="p-3 text-[10px] font-black text-red-500 text-right font-mono">${(row.Faltante_Calc > 0 ? row.Faltante_Calc : 0).toLocaleString()}</td>
-                                    <td className="p-3 align-middle">
-                                        <div className="flex items-center gap-2 w-full">
-                                            <span className="text-[10px] font-black w-8 text-right">{cump.toFixed(2)}%</span>
-                                            <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                                <div className={`h-full rounded-full ${getProgressColor(cump)}`} style={{ width: `${Math.min(cump, 100)}%` }}></div>
+                        {currentRows.length > 0 ? (
+                            currentRows.map((row, idx) => {
+                                const cump = parseFloat(row['Cumplimiento_%'] || 0);
+                                return (
+                                    <tr key={idx} className="hover:bg-indigo-50/30 transition-colors group">
+                                        <td className="p-3 text-[10px] font-bold text-slate-500 uppercase">{row.Regional_Cobro || 'S/D'}</td>
+                                        <td className="p-3 text-[11px] font-black text-slate-700">{row.Zona || 'S/D'}</td>
+                                        <td className="p-3 text-[10px] font-bold text-slate-600 uppercase">{row.Cobrador || 'S/D'}</td>
+                                        <td className="p-3 text-[10px] font-semibold text-slate-500 text-right font-mono">${(Number(row.Meta_Total) || 0).toLocaleString()}</td>
+                                        <td className="p-3 text-[10px] font-bold text-slate-700 text-right font-mono">${(Number(row.Recaudo_Total) || 0).toLocaleString()}</td>
+                                        <td className="p-3 text-[10px] font-black text-red-500 text-right font-mono">${(Number(row.Faltante_Calc) > 0 ? Number(row.Faltante_Calc) : 0).toLocaleString()}</td>
+                                        <td className="p-3 align-middle">
+                                            <div className="flex items-center gap-2 w-full">
+                                                <span className="text-[10px] font-black w-8 text-right">{cump.toFixed(2)}%</span>
+                                                <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className={`h-full rounded-full ${getProgressColor(cump)}`} style={{ width: `${Math.min(cump, 100)}%` }}></div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            );
-                        })}
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        ) : (
+                            <tr>
+                                <td colSpan="7" className="p-8 text-center text-xs font-bold text-slate-400 uppercase">
+                                    No hay datos para mostrar
+                                </td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
             <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Viendo {indexOfFirstRow + 1} - {Math.min(indexOfLastRow, data.length)} de {data.length} registros</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">
+                    Viendo {safeData.length > 0 ? indexOfFirstRow + 1 : 0} - {Math.min(indexOfLastRow, safeData.length)} de {safeData.length} registros
+                </span>
                 <div className="flex gap-2">
-                    <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-500"><ChevronLeft size={14} /></button>
-                    <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-500"><ChevronRight size={14} /></button>
+                    <button 
+                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
+                        disabled={validPage === 1 || safeData.length === 0} 
+                        className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-500"
+                    >
+                        <ChevronLeft size={14} />
+                    </button>
+                    <button 
+                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
+                        disabled={validPage === totalPages || safeData.length === 0} 
+                        className="p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-500"
+                    >
+                        <ChevronRight size={14} />
+                    </button>
                 </div>
             </div>
         </div>
