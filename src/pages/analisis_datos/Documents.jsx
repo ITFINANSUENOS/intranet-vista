@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import AuthenticatedLayout from '../../layouts/AuthenticatedLayout';
 import { useAuth } from '../../context/AuthContext';
-import { RefreshCw, CheckCircle2, Activity, AlertTriangle, X, Filter as FilterIcon } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Activity, AlertTriangle, X, Filter as FilterIcon, Clock } from 'lucide-react';
 
 import { FilterSidebar } from './DashboardComponents';
 import Cartera from './Cartera';
@@ -20,6 +20,9 @@ export default function Documents() {
     
     const [loading, setLoading] = useState(false);
     const [selectedJobId, setSelectedJobId] = useState(null);
+    const [lastUpdateDate, setLastUpdateDate] = useState(null); 
+    
+    // Almacenará la data como caché. Solo se llena si se visita la pestaña.
     const [moduleData, setModuleData] = useState({ 
         cartera: null, 
         seguimientos: null, 
@@ -34,202 +37,289 @@ export default function Documents() {
         CALL_CENTER_FILTRO: [], 
         Zona: [], 
         Regional_Cobro: [], 
-        Franja_Cartera: [] 
+        Franja_Cartera: [],
+        Novedades: []
     });
-    
+
+    const hasActiveFilters = useMemo(() => {
+        return Object.values(selectedFilters).some(filterArray => filterArray && filterArray.length > 0);
+    }, [selectedFilters]);
+
     useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [activeTab]);
+    
+    // 1. Obtener Reporte Activo Inicial
+    useEffect(() => {
+        let isMounted = true; // Previene actualizaciones de estado si el componente se desmonta
+
         apiClient.get('/reportes/activo')
             .then((response) => {
+                if (!isMounted) return;
+                
                 const data = response.data;
                 const responseData = data?.data || data; 
                 const id = responseData?.active_job_id || responseData?.job_id || data?.active_job_id;
-
+                
                 if (id) {
                     setSelectedJobId(id);
+                    
+                    // Extraer y formatear la fecha_actualizacion según la nueva estructura de la API
+                    const dateString = responseData?.fecha_actualizacion || responseData?.updated_at || responseData?.created_at;
+                    
+                    if (dateString) {
+                        const dateObj = new Date(dateString);
+                        setLastUpdateDate(dateObj.toLocaleString('es-ES', { 
+                            day: '2-digit', 
+                            month: 'short', 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                        }));
+                    } else {
+                        // Fallback si el backend no envía fecha
+                        setLastUpdateDate(new Date().toLocaleString('es-ES', { 
+                            day: '2-digit', 
+                            month: 'short', 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                        }));
+                    }
                 }
             })
-            .catch(err => console.error("Error al obtener reporte activo:", err));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); 
-
-    useEffect(() => {
-        if (selectedJobId) {
-            setLoading(true);
-            
-            const query = `?job_id=${selectedJobId}`;
-            
-            Promise.all([
-                apiClient.get(`/wallet/init/cartera${query}`),
-                apiClient.get(`/wallet/init/seguimientos${query}`),
-                apiClient.get(`/wallet/init/resultados${query}`)
-            ])
-            .then(([resC, resS, resR]) => { 
-                setModuleData({ 
-                    cartera:      resC.data?.data?.data || resC.data?.data || resC.data, 
-                    seguimientos: resS.data?.data?.data || resS.data?.data || resS.data,
-                    resultados:   resR.data?.data?.data || resR.data?.data || resR.data 
-                }); 
-                setLoading(false); 
-            })
-            .catch((err) => {
-                console.error("Error cargando datos:", err);
-                setLoading(false);
+            .catch(err => {
+                if (isMounted) console.error("Error al obtener reporte activo:", err);
             });
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedJobId]); 
 
+        return () => { isMounted = false; };
+    }, [apiClient]); 
+
+    // 2. Carga Diferida (Lazy Fetching)
+    useEffect(() => {
+        if (!selectedJobId) return;
+
+        let isMounted = true;
+
+        const loadTabData = async () => {
+            if (['cartera', 'seguimientos', 'resultados'].includes(activeTab)) {
+                if (!moduleData[activeTab]) {
+                    setLoading(true);
+                    try {
+                        const response = await apiClient.get(`/wallet/init/${activeTab}?job_id=${selectedJobId}`);
+                        if (!isMounted) return;
+
+                        const rawData = response.data?.data?.data || response.data?.data || response.data;
+                        
+                        setModuleData(prev => ({ 
+                            ...prev, 
+                            [activeTab]: rawData 
+                        }));
+                    } catch (error) {
+                        if (isMounted) {
+                            console.error(`Error cargando datos de ${activeTab}:`, error);
+                            setNotification({ type: 'error', message: `Error al cargar datos de ${activeTab}` });
+                        }
+                    } finally {
+                        if (isMounted) setLoading(false);
+                    }
+                }
+            }
+        };
+
+        loadTabData();
+
+        return () => { isMounted = false; };
+    }, [activeTab, selectedJobId, moduleData, apiClient]); 
+
+    // Notificaciones del Upload
     const handleUploadStart = () => setNotification({ type: 'success', message: 'Iniciando carga...' });
     const handleUploadSuccess = (jobId) => {
         setSelectedJobId(jobId);
+        setLastUpdateDate(new Date().toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }));
+        setModuleData({ cartera: null, seguimientos: null, resultados: null });
         setNotification({ type: 'success', message: 'Reporte procesado correctamente' });
     };
     const handleUploadError = (errorMessage) => setNotification({ type: 'error', message: errorMessage });
 
+    // 3. Optimización O(N) para Extracción de Filtros
     const filterOptions = useMemo(() => {
-        const raw = moduleData.cartera;
-        const rawSeg = moduleData.seguimientos;
-        if (!raw || !rawSeg) return {};
-        
         const keys = ['Empresa', 'CALL_CENTER_FILTRO', 'Zona', 'Regional_Cobro', 'Franja_Cartera'];
-        const options = {};
         
+        const sets = {
+            Empresa: new Set(),
+            CALL_CENTER_FILTRO: new Set(),
+            Zona: new Set(),
+            Regional_Cobro: new Set(),
+            Franja_Cartera: new Set()
+        };
+
+        const extractFilters = (dataArray) => {
+            if (!dataArray || !Array.isArray(dataArray)) return;
+            for (let i = 0; i < dataArray.length; i++) {
+                const item = dataArray[i];
+                for (let j = 0; j < keys.length; j++) {
+                    const key = keys[j];
+                    if (item[key]) {
+                        sets[key].add(item[key]);
+                    }
+                }
+            }
+        };
+
+        if (moduleData.cartera) {
+            extractFilters(moduleData.cartera.cubo_regional);
+            extractFilters(moduleData.cartera.cubo_desembolso);
+        }
+        if (moduleData.seguimientos) {
+            extractFilters(moduleData.seguimientos.donut_data);
+        }
+
+        const options = {};
         keys.forEach(key => {
-            const allValues = [
-                ...(raw.cubo_regional || []), 
-                ...(raw.cubo_desembolso || []), 
-                ...(rawSeg.donut_data || [])
-            ].map(item => item[key]).filter(Boolean);
-            options[key] = [...new Set(allValues)].sort();
+            options[key] = Array.from(sets[key]).sort();
         });
+        
         return options;
     }, [moduleData]);
 
-    const handleFilterChange = (category, value) => {
+    const handleFilterChange = useCallback((category, value) => {
         setSelectedFilters(prev => {
             const current = prev[category] || [];
             const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
             return { ...prev, [category]: next };
         });
-    };
+    }, []);
+
+    const handleClearFilters = useCallback(() => {
+        setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [], Novedades: [] });
+    }, []);
 
     return (
         <AuthenticatedLayout title="Panel Cartera">
-            <div className="min-h-screen bg-slate-50 flex flex-col relative">
+            {/* [MODIFICADO]: Se eliminó 'overflow-hidden' de este div para permitir que 'sticky' funcione correctamente */}
+            <div className="min-h-screen flex flex-col relative w-full bg-[#041830]">
                 
-                {/* Notificaciones Flotantes */}
+                {/* --- CAPA DE DISEÑO LLAMATIVO (Fondo interactivo) --- */}
+                <div 
+                    className="absolute inset-0 pointer-events-none opacity-60 z-0" 
+                    style={{ 
+                        // Degradado radial cian de fondo + Patrón de puntos blancos
+                        backgroundImage: `
+                            radial-gradient(circle at 50% 30%, rgba(34, 211, 238, 0.1) 0%, transparent 60%), 
+                            radial-gradient(rgba(255, 255, 255, 0.04) 1.5px, transparent 1.5px)
+                        `, 
+                        backgroundSize: '100% 100%, 28px 28px' 
+                    }}
+                />
+                
                 {notification && (
-                    <div className="fixed top-6 right-6 z-[100] flex items-center gap-3 bg-white border p-4 rounded-2xl shadow-xl animate-in slide-in-from-right duration-300">
-                        {notification.type === 'success' ? <CheckCircle2 className="text-emerald-500" size={20} /> : <AlertTriangle className="text-red-500" size={20} />}
-                        <span className="text-[10px] font-black uppercase text-slate-700">{notification.message}</span>
-                        <X size={14} className="cursor-pointer text-slate-400 hover:text-slate-600" onClick={() => setNotification(null)}/>
+                    <div className="fixed top-6 right-6 z-[100] flex items-center gap-3 bg-slate-800 border border-white/10 p-4 rounded-2xl shadow-xl animate-in slide-in-from-right duration-300">
+                        {notification.type === 'success' ? <CheckCircle2 className="text-emerald-400" size={20} /> : <AlertTriangle className="text-red-400" size={20} />}
+                        <span className="text-[10px] font-black uppercase text-white">{notification.message}</span>
+                        <X size={14} className="cursor-pointer text-slate-400 hover:text-white" onClick={() => setNotification(null)}/>
                     </div>
                 )}
                 
-                {/* HEADER FIJO - CORREGIDO: z-30 en lugar de z-[60] para no tapar el Sidebar principal */}
-                <header className="bg-white px-4 md:px-8 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0 z-30 h-20 gap-4 shadow-sm">
-                    <div className="flex items-center gap-3">
+                {/* --- HEADER PROFESIONAL ACTUALIZADO --- */}
+                {/* [MODIFICADO]: Se cambió a z-50 para asegurar que quede por encima del contenido inferior al hacer scroll */}
+                <header 
+                    className="px-4 md:px-8 py-3.5 flex justify-between items-center sticky top-0 z-50 min-h-[5rem] gap-4 shadow-[0_4px_30px_rgba(0,0,0,0.3)] backdrop-blur-md border-b border-white/10 transition-all duration-300"
+                    style={{ backgroundColor: 'rgba(4, 24, 48, 0.85)' }} // Ligeramente transparente para efecto glass
+                >
+                    <div className="flex items-center gap-4">
                         <button 
-                            onClick={() => setIsSidebarOpen(true)} 
-                            className="md:hidden p-2.5 bg-indigo-50 rounded-xl text-indigo-600 border border-indigo-100 shadow-sm active:scale-95 transition-transform"
+                            onClick={() => setIsSidebarOpen(prev => !prev)} 
+                            className={`
+                                relative flex items-center gap-2 p-2.5 rounded-xl border transition-all duration-200 active:scale-95
+                                ${hasActiveFilters 
+                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-[0_0_15px_rgba(34,211,238,0.15)]' 
+                                    : isSidebarOpen 
+                                        ? 'bg-white/20 text-white border-white/30' 
+                                        : 'bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white'
+                                }
+                            `}
                         >
-                            <FilterIcon size={20} strokeWidth={2.5} />
+                            <div className="relative flex items-center">
+                                <FilterIcon size={18} strokeWidth={2.5} className={hasActiveFilters ? "text-cyan-300" : ""} />
+                                {hasActiveFilters && (
+                                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(34,211,238,0.8)] animate-pulse" />
+                                )}
+                            </div>
+                            <span className="hidden sm:inline text-[11px] font-bold tracking-wider uppercase">Filtros</span>
                         </button>
                         
-                        <Activity className="text-indigo-600 hidden md:block" size={24}/>
-                        <div>
-                            <h1 className="text-sm font-black uppercase text-slate-800 tracking-tighter leading-none">Gestión Cartera</h1>
-                            {selectedJobId && (
-                                <span className="text-[10px] font-bold bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded mt-1 inline-block border border-indigo-100">
-                                    JOB: #{selectedJobId}
-                                </span>
+                        <div className="h-8 w-px bg-white/10 hidden lg:block mx-2"></div>
+
+                        <div className="hidden sm:flex flex-col justify-center">
+                            <div className="flex items-center gap-2">
+                                <Activity className="text-cyan-400" size={18} strokeWidth={2.5}/>
+                                <h1 className="text-sm font-black uppercase text-white tracking-widest leading-none drop-shadow-sm">
+                                    Gestión Cartera
+                                </h1>
+                            </div>
+                            
+                            {lastUpdateDate && (
+                                <div className="flex items-center gap-1.5 mt-1.5 opacity-90">
+                                    <Clock size={11} className="text-cyan-300/80" />
+                                    <span className="text-[10px] font-medium text-white/70 tracking-wide uppercase">
+                                        Última act: <span className="text-white/90">{lastUpdateDate}</span>
+                                    </span>
+                                </div>
                             )}
                         </div>
                     </div>
                     
                     <div className="flex items-center gap-4 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
-                        <div className="flex bg-slate-100 p-1 rounded-xl shrink-0 items-center">
-                            {['cartera', 'seguimientos', 'resultados'].map(tab => (
+                        <div className="flex bg-black/20 p-1.5 rounded-xl shrink-0 items-center border border-white/5 shadow-inner">
+                            {['cartera', 'seguimientos', 'resultados', 'detallados', 'comercial'].map(tab => (
                                 <button 
                                     key={tab} 
                                     onClick={() => setActiveTab(tab)} 
-                                    className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${
-                                        activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                                    className={`px-4 md:px-5 py-2 rounded-lg text-[10px] font-bold transition-all duration-300 whitespace-nowrap tracking-wider uppercase ${
+                                        activeTab === tab 
+                                            ? 'bg-white/15 text-white shadow-sm border border-white/20 backdrop-blur-sm' 
+                                            : 'text-white/50 hover:text-white hover:bg-white/5 border border-transparent'
                                     }`}
                                 >
-                                    {tab.toUpperCase()}
+                                    {tab}
                                 </button>
                             ))}
-                            <button onClick={() => setActiveTab('detallados')} className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${activeTab === 'detallados' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>DETALLADOS</button>
-                            <button onClick={() => setActiveTab('comercial')} className={`px-4 md:px-6 py-2 rounded-lg text-[10px] font-black transition-all whitespace-nowrap ${activeTab === 'comercial' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>COMERCIAL</button>
                         </div>
 
                         {userPermissions.includes('general_report') && (
-                            <>
+                            <div className="shrink-0">
                                 <div className="hidden md:block">
                                     <FileUploadButton apiClient={apiClient} onUploadStart={handleUploadStart} onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} />
                                 </div>
                                 <div className="md:hidden">
-                                    <FileUploadButton apiClient={apiClient} onUploadStart={handleUploadStart} onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} iconOnly={true} className="bg-indigo-600 text-white p-2 rounded-xl" />
+                                    <FileUploadButton apiClient={apiClient} onUploadStart={handleUploadStart} onUploadSuccess={handleUploadSuccess} onUploadError={handleUploadError} iconOnly={true} className="bg-cyan-500 hover:bg-cyan-400 text-[#041830] p-2.5 rounded-xl transition-colors shadow-lg" />
                                 </div>
-                            </>
+                            </div>
                         )}
                     </div>
                 </header>
-
-                {/* CONTENEDOR PRINCIPAL - Flex Row con items-stretch para el Sticky Infalible */}
-                <div className="flex flex-row flex-1 w-full relative items-stretch">
-                    
-                    {/* LA PISTA (TRACK) */}
-                    <aside className="hidden md:block w-72 shrink-0 border-r border-slate-100 bg-white relative">
-                        
-                        {/* EL CARRITO (STICKY) - CORREGIDO: z-20 para mantenerse por debajo de tu menú principal */}
-                        <div className="sticky top-20 h-[calc(100vh-80px)] overflow-y-auto w-full z-20 scrollbar-thin">
-                            <FilterSidebar 
-                                options={filterOptions} 
-                                selectedFilters={selectedFilters} 
-                                onFilterChange={handleFilterChange} 
-                                onClear={() => setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [] })} 
-                                isOpen={true} 
-                                onClose={() => {}} 
-                            />
+                
+                <FilterSidebar 
+                    options={filterOptions} selectedFilters={selectedFilters} 
+                    onFilterChange={handleFilterChange} onClear={handleClearFilters} 
+                    isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)}
+                />
+                
+                <main className="flex-1 w-full p-4 md:p-8 relative z-10">
+                    {loading ? (
+                        // [MODIFICADO]: Spinner de carga en modo oscuro
+                        <div className="h-96 w-full flex flex-col items-center justify-center bg-[#0a203f]/50 backdrop-blur-xl rounded-[3rem] shadow-2xl italic text-[10px] font-black text-cyan-200/70 uppercase tracking-widest border border-white/10">
+                            <RefreshCw className="animate-spin text-cyan-400 mb-4" size={32} /> Obteniendo datos...
                         </div>
-                    </aside>
-
-                    {/* Sidebar para Móvil */}
-                    <div className="md:hidden">
-                        <FilterSidebar 
-                            options={filterOptions} 
-                            selectedFilters={selectedFilters} 
-                            onFilterChange={handleFilterChange} 
-                            onClear={() => setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [] })} 
-                            isOpen={isSidebarOpen}
-                            onClose={() => setIsSidebarOpen(false)}
-                        />
-                    </div>
-                    
-                    {/* CONTENIDO PRINCIPAL */}
-                    <main className="flex-1 min-w-0 p-4 md:p-8">
-                        {loading && activeTab !== 'detallados' && activeTab !== 'comercial' ? (
-                            <div className="h-96 flex flex-col items-center justify-center bg-white rounded-[3rem] shadow-sm italic text-[10px] font-black text-slate-400 uppercase tracking-widest border border-slate-100">
-                                <RefreshCw className="animate-spin text-indigo-600 mb-4" size={32} /> Cargando Tablero...
-                            </div>
-                        ) : (
-                            <div className="space-y-12 pb-10">
-                                {activeTab === 'cartera' && moduleData.cartera && <Cartera data={moduleData.cartera} selectedFilters={selectedFilters} />}
-                                {activeTab === 'seguimientos' && moduleData.seguimientos && <Seguirientos data={moduleData.seguimientos} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId} />}
-                                {activeTab === 'resultados' && moduleData.resultados && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
-                                
-                                <div className={activeTab === 'detallados' ? 'block' : 'hidden'}>
-                                    <DatosDetallados apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />
-                                </div>
-                                <div className={activeTab === 'comercial' ? 'block' : 'hidden'}>
-                                    <Comercial apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />
-                                </div>
-                            </div>
-                        )}
-                    </main>
-                </div>
+                    ) : (
+                        <div className="space-y-12 pb-10 w-full">
+                            {activeTab === 'cartera' && moduleData.cartera && <Cartera data={moduleData.cartera} selectedFilters={selectedFilters} />}
+                            {activeTab === 'seguimientos' && moduleData.seguimientos && <Seguirientos data={moduleData.seguimientos} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId} />}
+                            {activeTab === 'resultados' && moduleData.resultados && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
+                            {activeTab === 'detallados' && <DatosDetallados apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
+                            {activeTab === 'comercial' && <Comercial apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
+                        </div>
+                    )}
+                </main>
             </div>
         </AuthenticatedLayout>
     );
