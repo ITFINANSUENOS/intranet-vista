@@ -100,8 +100,13 @@ const InteractiveSunburstPlotly = React.memo(({ data, focusedNode, setFocusedNod
             : percentValue.toFixed(0) + '%';
 
         let textRotation = 0;
-        if (isOuterRing) {
+        
+        // --- SOLUCIÓN 1: Rotación Inteligente ---
+        // Rotamos el anillo externo siempre.
+        // Rotamos el interno SOLO si la porción es pequeña (menor al 15%).
+        if (isOuterRing || (!isOuterRing && percent < 0.15)) {
             let angle = ((-midAngle % 360) + 360) % 360;
+            // Prevenir que el texto quede de cabeza
             if (angle > 90 && angle <= 270) angle += 180;
             textRotation = angle;
         }
@@ -113,11 +118,15 @@ const InteractiveSunburstPlotly = React.memo(({ data, focusedNode, setFocusedNod
                 textAnchor="middle"
                 dominantBaseline="central"
                 className="pointer-events-none font-bold"
-                transform={isOuterRing ? `rotate(${textRotation}, ${x}, ${y})` : ''}
-                style={{ fontSize: isOuterRing ? '7.5px' : '8.5px', textTransform: 'uppercase', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}
+                transform={`rotate(${textRotation}, ${x}, ${y})`} // <- Rotación aplicada siempre
+                style={{ 
+                    fontSize: isOuterRing ? '7px' : '8px', // Tamaño de fuente optimizado
+                    textTransform: 'uppercase', 
+                    textShadow: '1px 1px 2px rgba(0,0,0,0.8)' 
+                }}
             >
                 <tspan x={x} dy="-0.5em" fontWeight="900">{upperName}</tspan>
-                <tspan x={x} dy="1.2em" fontSize={isOuterRing ? '8.5px' : '9.5px'}>{displayPercent}</tspan>
+                <tspan x={x} dy="1.2em" fontSize={isOuterRing ? '8px' : '9px'}>{displayPercent}</tspan>
             </text>
         );
     }, []);
