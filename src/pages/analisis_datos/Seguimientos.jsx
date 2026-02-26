@@ -787,65 +787,55 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
     // ── FETCH CON DEBOUNCE ────────────────────────────────────────────────────
 
-    const fetchTableData = useCallback(async (source, page = 1, search = '', localFilters = {}, setter) => {
+    const fetchTableData = useCallback(async (source, page = 1, search = '', filters = {}, setter) => {
         if (!jobId) return;
+        setter(prev => ({ ...prev, loading: true, search }));
+
         try {
-            setter(prev => ({ ...prev, loading: true }));
-            
-            // 1. Formatear los filtros locales
+            // 1️⃣ Formatear FILTROS LOCALES de la tabla
             const formattedFilters = {};
-            Object.entries(localFilters).forEach(([key, value]) => {
-                if (value && key !== 'excluir_cargos') { 
-                    formattedFilters[key] = [value];
+            Object.entries(filters).forEach(([key, value]) => {
+                if (value !== '' && value !== null && value !== undefined && key !== 'excluir_cargos') {
+                    const backendKey = key.toLowerCase() === 'cargo_usuario' ? 'cargos' : key.toLowerCase();
+                    formattedFilters[backendKey] = [value];
                 }
             });
 
-            // 2. INTEGRAR FILTROS GLOBALES (selectedFilters) CON CONVERSIÓN A MINÚSCULAS
-            const mergedFilters = { ...formattedFilters };
-            if (selectedFilters && Object.keys(selectedFilters).length > 0) {
-                Object.entries(selectedFilters).forEach(([key, values]) => {
-                    if (values && values.length > 0) {
-                        // Transformar la llave a minúsculas para que coincida exactamente con el WalletController
-                        const backendKey = key.toLowerCase(); 
-                        mergedFilters[backendKey] = values;
-                    }
-                });
-            }
+            // 2️⃣ MAPEAR FILTROS GLOBALES (selectedFilters) - NUEVO
+            const mappedGlobalFilters = {};
+            Object.entries(selectedFilters || {}).forEach(([key, values]) => {
+                if (Array.isArray(values) && values.length > 0) {
+                    const backendKey = key.toLowerCase();
+                    mappedGlobalFilters[backendKey] = values;
+                }
+            });
 
+            // 3️⃣ COMBINAR ambos filtros en el payload
             const payload = {
                 job_id: jobId,
                 origen: source,
                 page,
                 page_size: 15,
                 search_term: search,
-                ...mergedFilters // Se envían con las llaves en minúsculas
+                ...formattedFilters,        // Filtros locales de la tabla
+                ...mappedGlobalFilters      // ✅ NUEVO: Filtros globales del dashboard
             };
 
             const response = await apiClient.post('/wallet/buscar', payload);
-            
             setter(prev => ({
                 ...prev,
                 data: response.data.data || [],
                 loading: false,
                 pagination: {
-                    current: response.data.meta?.page || page,
-                    total_pages: response.data.meta?.pages || 0,
+                    current:      response.data.meta?.page  || page,
+                    total_pages:  response.data.meta?.pages || 0,
                     total_records: response.data.meta?.total || 0
                 }
             }));
         } catch {
             setter(prev => ({ ...prev, loading: false }));
         }
-    }, [jobId, apiClient, selectedFilters]);
-
-    useEffect(() => {
-        if (jobId) {
-            // Al cambiar selectedFilters o jobId, refrescamos ambas tablas en la página 1
-            const { excluir_cargos: _exc, ...filtersGestionBackend } = localFiltersGestion;
-            fetchTableData('seguimientos_gestion', 1, gestionTable.search, filtersGestionBackend, setGestionTable);
-            fetchTableData('seguimientos_rodamientos', 1, rodamientoTable.search, localFiltersRodamiento, setRodamientoTable);
-        }
-    }, [jobId, selectedFilters, fetchTableData]);
+    }, [jobId, apiClient, selectedFilters]); // ✅ AGREGAR selectedFilters a dependencias
 
     const debounceGestion     = useRef(null);
     const debounceRodamiento  = useRef(null);
@@ -903,11 +893,11 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
     useEffect(() => {
         if (jobId) fetchTableData('seguimientos_gestion', 1, gestionTable.search, backendFiltersGestion, setGestionTable);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [backendFiltersGestion, jobId]);
+    }, [backendFiltersGestion, jobId, selectedFilters]); // ✅ Agregar selectedFilters
 
     useEffect(() => {
         if (jobId) fetchTableData('seguimientos_rodamientos', 1, rodamientoTable.search, localFiltersRodamiento, setRodamientoTable);
-    }, [localFiltersRodamiento, jobId, fetchTableData]);
+    }, [localFiltersRodamiento, jobId, selectedFilters, fetchTableData]); // ✅ Agregar selectedFilters
 
     // ── DATOS PROCESADOS ──────────────────────────────────────────────────────
 
@@ -993,7 +983,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <ChartCard
                     title="Estado de Vigencia y Recaudo"
-                    subtitle=""
+                    subtitle="Distribución por estado actual de cartera"
                     isEmpty={charts.recaudo.length === 0}
                 >
                     <InteractiveSunburstPlotly
@@ -1004,7 +994,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
                 <ChartCard
                     title="Distribución de Gestión"
-                    subtitle=""
+                    subtitle="Cargos por cada estado de gestión"
                     isEmpty={charts.gestion.level1.length === 0}
                 >
                     <InteractiveSunburstPlotly
@@ -1016,7 +1006,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
                 <ChartCard
                     title="Gestión con Pago"
-                    subtitle=""
+                    subtitle="Eficiencia de cobro por cargo"
                     isEmpty={charts.conPago.level1.length === 0}
                 >
                     <InteractiveSunburstPlotly
@@ -1028,7 +1018,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
                 <ChartCard
                     title="Gestión sin Pago"
-                    subtitle=""
+                    subtitle="Cartera gestionada pendiente de recaudo"
                     isEmpty={charts.sinPago.level1.length === 0}
                 >
                     <InteractiveSunburstPlotly
