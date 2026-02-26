@@ -270,7 +270,7 @@ export default function Documents() {
                     
                     <div className="flex items-center gap-4 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
                         <div className="flex bg-black/20 p-1.5 rounded-xl shrink-0 items-center border border-white/5 shadow-inner">
-                            {['cartera', 'seguimientos', 'resultados', 'detallados', 'comercial'].map(tab => (
+                            {['cartera', 'seguimientos', 'detallados', 'resultados', 'comercial'].map(tab => (
                                 <button 
                                     key={tab} 
                                     onClick={() => setActiveTab(tab)} 
@@ -314,8 +314,8 @@ export default function Documents() {
                         <div className="space-y-12 pb-10 w-full">
                             {activeTab === 'cartera' && moduleData.cartera && <Cartera data={moduleData.cartera} selectedFilters={selectedFilters} />}
                             {activeTab === 'seguimientos' && moduleData.seguimientos && <Seguirientos data={moduleData.seguimientos} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId} />}
-                            {activeTab === 'resultados' && moduleData.resultados && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
                             {activeTab === 'detallados' && <DatosDetallados apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
+                            {activeTab === 'resultados' && moduleData.resultados && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
                             {activeTab === 'comercial' && <Comercial apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
                         </div>
                     )}

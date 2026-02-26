@@ -55,7 +55,7 @@ const NavItem = ({ to, icon: Icon, children, isCollapsed, subItems, onItemClick 
 
     const content = (
         <div className={`
-            relative flex flex-col md:flex-row items-center p-3 rounded-xl transition-all duration-300 cursor-pointer group
+            relative flex items-center p-3 rounded-xl transition-all duration-300 cursor-pointer group
             ${isActive 
                 ? 'bg-gradient-to-r from-blue-600/20 to-transparent text-white border border-white/10' 
                 : 'text-gray-400 hover:text-white hover:bg-white/5'}
@@ -64,17 +64,17 @@ const NavItem = ({ to, icon: Icon, children, isCollapsed, subItems, onItemClick 
                 <div className="absolute left-0 top-1/4 h-1/2 w-1 bg-blue-500 rounded-full shadow-[0_0_10px_#3b82f6]" />
             )}
 
-            <Icon className={`w-8 h-8 md:w-6 md:h-6 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${isActive ? 'text-blue-400' : 'text-gray-500'}`} />
+            <Icon className={`w-6 h-6 flex-shrink-0 transition-transform duration-300 group-hover:scale-110 ${isActive ? 'text-blue-400' : 'text-gray-500'}`} />
             
             <span className={`
-                mt-2 md:mt-0 md:ml-3 font-medium text-sm md:text-base transition-all duration-300 overflow-hidden whitespace-nowrap
-                ${isCollapsed ? 'md:opacity-0 md:w-0 md:hidden' : 'opacity-100 w-full md:w-auto'}
+                ml-3 font-medium text-base transition-all duration-300 overflow-hidden whitespace-nowrap
+                ${isCollapsed ? 'md:opacity-0 md:w-0 md:hidden' : 'opacity-100 w-auto'}
             `}>
                 {children}
             </span>
 
             {hasSubItems && !isCollapsed && (
-                <div className="hidden md:block ml-auto">
+                <div className="ml-auto">
                     <ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
                 </div>
             )}
@@ -128,16 +128,20 @@ export default function Sidebar() {
 
     return (
         <>
-            <button 
-                onClick={() => setIsMobileOpen(true)}
-                className="md:hidden fixed top-4 left-4 z-40 p-2 bg-[#041830] rounded-lg shadow-lg text-blue-400 border border-white/10"
-            >
-                <Bars3Icon className="w-6 h-6" />
-            </button>
+            {/* BOTÓN HAMBURGUESA: Visible solo en móviles */}
+            {!isMobileOpen && (
+                <button 
+                    onClick={() => setIsMobileOpen(true)}
+                    className="md:hidden fixed top-4 left-4 z-50 p-3 bg-[#061c37] rounded-full shadow-xl text-blue-400 border border-white/10 hover:scale-110 active:scale-95 transition-all"
+                >
+                    <Bars3Icon className="w-6 h-6" />
+                </button>
+            )}
 
+            {/* OVERLAY: Fondo oscuro al abrir el sidebar en móvil */}
             {isMobileOpen && (
                 <div 
-                    className="fixed inset-0 bg-black/70 z-50 md:hidden backdrop-blur-md transition-opacity"
+                    className="fixed inset-0 bg-black/60 z-[55] md:hidden backdrop-blur-sm transition-opacity duration-300"
                     onClick={() => setIsMobileOpen(false)}
                 />
             )}
@@ -145,46 +149,44 @@ export default function Sidebar() {
             <aside 
                 className={`
                     fixed top-0 left-0 h-full bg-gradient-to-b from-[#061c37] to-[#041830] border-r border-white/5 z-[60] flex flex-col transition-all duration-500 ease-in-out shadow-2xl
-                    overflow-x-hidden
-                    ${isMobileOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'}
-                    md:translate-x-0 
-                    ${isCollapsed ? 'md:w-24' : 'md:w-64'}
+                    ${isMobileOpen ? 'translate-x-0 w-[280px]' : '-translate-x-full md:translate-x-0'}
+                    ${isCollapsed ? 'md:w-20' : 'md:w-64'}
                 `}
                 onMouseEnter={() => setIsCollapsed(false)}
                 onMouseLeave={() => setIsCollapsed(true)}
             >
-                {/* --- SECCIÓN DEL LOGO MODIFICADA --- */}
-                <div className="p-4 md:p-6 flex justify-center items-center border-b border-white/5 flex-shrink-0 relative min-h-[100px]">
+                {/* --- SECCIÓN DEL LOGO --- */}
+                <div className="p-4 md:p-6 flex justify-center items-center border-b border-white/5 flex-shrink-0 relative min-h-[90px]">
                     <div className={`
                         flex items-center justify-center transition-all duration-500 ease-in-out
-                        ${!isCollapsed 
-                            ? 'bg-white/5 backdrop-blur-md p-3 md:p-4 rounded-2xl border border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.15)] w-full' 
+                        ${(!isCollapsed || isMobileOpen)
+                            ? 'bg-white/5 backdrop-blur-md p-3 rounded-2xl border border-white/10 w-full' 
                             : 'p-1'
                         }
                     `}>
                         <img 
                             src="/images/logos/logo.png" 
                             alt="Logo" 
-                            className={`object-contain transition-all duration-500 drop-shadow-[0_0_12px_rgba(255,255,255,0.2)] 
-                            ${isCollapsed ? 'md:w-14 w-12' : 'w-48'}`} 
+                            className={`object-contain transition-all duration-500 
+                            ${(isCollapsed && !isMobileOpen) ? 'md:w-10' : 'w-40'}`} 
                         />
                     </div>
                     
+                    {/* Botón cerrar dentro del sidebar (móvil) */}
                     <button 
                         onClick={() => setIsMobileOpen(false)}
-                        className="absolute right-4 top-6 md:hidden text-gray-400 hover:text-red-400 bg-black/20 p-1.5 rounded-lg backdrop-blur-sm border border-white/5"
+                        className="absolute -right-2 top-6 md:hidden text-gray-400 bg-[#061c37] p-2 rounded-l-xl border border-white/10"
                     >
-                        <XMarkIcon className="w-6 h-6" />
+                        <XMarkIcon className="w-5 h-5" />
                     </button>
                 </div>
-                {/* --- FIN DE LA SECCIÓN DEL LOGO --- */}
 
-                <nav className="flex-grow space-y-3 overflow-y-auto overflow-x-hidden p-4 scrollbar-hide mt-4">
+                <nav className="flex-grow space-y-2 overflow-y-auto overflow-x-hidden p-4 scrollbar-hide mt-4">
                     {canAccess(user, 'view_dashboard') && (
                         <NavItem 
                             to="/dashboard" 
                             icon={HomeIcon} 
-                            isCollapsed={isCollapsed}
+                            isCollapsed={isCollapsed && !isMobileOpen}
                             onItemClick={handleMobileLinkClick}
                         >
                             Home
@@ -195,7 +197,7 @@ export default function Sidebar() {
                         <NavItem 
                             to="/herramientas" 
                             icon={ClipboardIcon} 
-                            isCollapsed={isCollapsed}
+                            isCollapsed={isCollapsed && !isMobileOpen}
                             onItemClick={handleMobileLinkClick}
                         >
                             Herramientas
@@ -206,7 +208,7 @@ export default function Sidebar() {
                         <NavItem 
                             to="#" 
                             icon={Cog6ToothIcon} 
-                            isCollapsed={isCollapsed} 
+                            isCollapsed={isCollapsed && !isMobileOpen} 
                             subItems={configSubItems}
                             onItemClick={handleMobileLinkClick}
                         >
@@ -218,12 +220,12 @@ export default function Sidebar() {
                 <div className="p-4 border-t border-white/5 bg-black/10">
                     <button 
                         onClick={() => logout(() => navigate('/login'))}
-                        className="w-full flex flex-col md:flex-row items-center p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-300 group overflow-hidden"
+                        className="w-full flex items-center p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all duration-300 group"
                     >
                         <div className="p-2 rounded-lg group-hover:bg-red-500 group-hover:text-white transition-colors flex-shrink-0">
                             <ArrowLeftEndOnRectangleIcon className="w-6 h-6" />
                         </div>
-                        <span className={`mt-2 md:mt-0 md:ml-3 font-semibold whitespace-nowrap transition-all duration-300 ${isCollapsed ? 'md:opacity-0 md:w-0 md:hidden' : 'opacity-100'}`}>
+                        <span className={`ml-3 font-semibold whitespace-nowrap transition-all duration-300 ${(isCollapsed && !isMobileOpen) ? 'md:opacity-0 md:w-0 md:hidden' : 'opacity-100'}`}>
                             Cerrar Sesión
                         </span>
                     </button>
