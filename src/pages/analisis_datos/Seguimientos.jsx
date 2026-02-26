@@ -4,10 +4,12 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList
 } from 'recharts';
 import { 
-    Search, Filter, ChevronDown, ChevronUp, Columns, ChevronLeft, ChevronRight, Layers, Download 
+    Search, Filter, ChevronDown, ChevronUp, Columns, ChevronLeft, ChevronRight, Layers
 } from 'lucide-react';
 
 import { getSafeColor } from './DashboardComponents';
+import ExportExcel from "../../components/cartera_buttons/ExportExcel";
+
 
 // ─── PALETA DE COLORES ────────────────────────────────────────────────────────
 const MAPA_COLORES_IMAGEN = {
@@ -101,12 +103,8 @@ const InteractiveSunburstPlotly = React.memo(({ data, focusedNode, setFocusedNod
 
         let textRotation = 0;
         
-        // --- SOLUCIÓN 1: Rotación Inteligente ---
-        // Rotamos el anillo externo siempre.
-        // Rotamos el interno SOLO si la porción es pequeña (menor al 15%).
         if (isOuterRing || (!isOuterRing && percent < 0.15)) {
             let angle = ((-midAngle % 360) + 360) % 360;
-            // Prevenir que el texto quede de cabeza
             if (angle > 90 && angle <= 270) angle += 180;
             textRotation = angle;
         }
@@ -118,9 +116,9 @@ const InteractiveSunburstPlotly = React.memo(({ data, focusedNode, setFocusedNod
                 textAnchor="middle"
                 dominantBaseline="central"
                 className="pointer-events-none font-bold"
-                transform={`rotate(${textRotation}, ${x}, ${y})`} // <- Rotación aplicada siempre
+                transform={`rotate(${textRotation}, ${x}, ${y})`}
                 style={{ 
-                    fontSize: isOuterRing ? '7px' : '8px', // Tamaño de fuente optimizado
+                    fontSize: isOuterRing ? '7px' : '8px',
                     textTransform: 'uppercase', 
                     textShadow: '1px 1px 2px rgba(0,0,0,0.8)' 
                 }}
@@ -160,11 +158,47 @@ const InteractiveSunburstPlotly = React.memo(({ data, focusedNode, setFocusedNod
         const isOuter = payload[0].name !== d.parentName && d.parentName;
         if (isOuter && HIDDEN_NAMES.has(String(d.name).toUpperCase())) return null;
         return (
-            <div className="bg-slate-900 border border-white/20 p-3 rounded-lg shadow-xl">
-                <p className="text-[10px] font-black text-indigo-300 uppercase mb-1">
-                    {d.parentName ? `${d.parentName} > ` : ''}{d.name}
-                </p>
-                <p className="text-white font-bold text-sm">{d.value.toLocaleString()}</p>
+            <div style={{
+                backgroundColor: '#0b1f3a',
+                border: '1px solid rgba(99,102,241,0.35)',
+                borderRadius: '14px',
+                padding: '12px 16px',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                minWidth: '180px',
+                backdropFilter: 'blur(12px)',
+            }}>
+                <div style={{ height: '2px', background: 'linear-gradient(90deg, #6366f1, transparent)', borderRadius: '2px', marginBottom: '10px' }} />
+
+                {d.parentName && (
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                            Categoría :
+                        </span>
+                        <span style={{ fontSize: '10px', fontWeight: 900, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {d.parentName}
+                        </span>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '14px' }}>
+                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                        {d.parentName ? 'Subcategoría :' : 'Categoría :'}
+                    </span>
+                    <span style={{ fontSize: '11px', fontWeight: 900, color: '#e2e8f0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        {d.name}
+                    </span>
+                </div>
+
+                <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', marginBottom: '14px' }} />
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
+                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                        Total :
+                    </span>
+                    <span style={{ fontSize: '18px', fontWeight: 900, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                        {d.value.toLocaleString()}
+                    </span>
+                </div>
             </div>
         );
     }, []);
@@ -259,8 +293,61 @@ const LocalStackedBar = React.memo(({ data, keys }) => {
                     tickFormatter={(val) => val.toLocaleString()}
                 />
                 <Tooltip
-                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                    contentStyle={{ backgroundColor: '#0b2241', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '11px' }}
+                    cursor={{ fill: 'rgba(99,102,241,0.06)' }}
+                    content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null;
+                        const total = payload.reduce((s, e) => s + (Number(e.value) || 0), 0);
+                        return (
+                            <div style={{
+                                backgroundColor: '#0b1f3a',
+                                border: '1px solid rgba(99,102,241,0.35)',
+                                borderRadius: '14px',
+                                padding: '12px 16px',
+                                boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                                minWidth: '200px',
+                                backdropFilter: 'blur(12px)',
+                            }}>
+                                <div style={{ height: '2px', background: 'linear-gradient(90deg, #6366f1, transparent)', borderRadius: '2px', marginBottom: '10px' }} />
+
+                                <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '10px' }}>
+                                    <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
+                                        Rodamiento :
+                                    </span>
+                                    <span style={{ fontSize: '11px', fontWeight: 900, color: '#e2e8f0', textTransform: 'uppercase' }}>
+                                        {label}
+                                    </span>
+                                </div>
+
+                                <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', marginBottom: '10px' }} />
+
+                                {payload.map((entry, i) => (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: entry.fill || entry.color, flexShrink: 0 }} />
+                                        <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', flex: 1, whiteSpace: 'nowrap' }}>
+                                            {String(entry.name).toUpperCase()} :
+                                        </span>
+                                        <span style={{ fontSize: '12px', fontWeight: 900, color: '#ffffff', letterSpacing: '-0.01em' }}>
+                                            {Number(entry.value).toLocaleString()}
+                                        </span>
+                                    </div>
+                                ))}
+
+                                {payload.length > 1 && (
+                                    <>
+                                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', flex: 1, whiteSpace: 'nowrap' }}>
+                                                Total :
+                                            </span>
+                                            <span style={{ fontSize: '16px', fontWeight: 900, color: '#ffffff', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                                                {total.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        );
+                    }}
                 />
                 <Legend
                     verticalAlign="top"
@@ -269,9 +356,6 @@ const LocalStackedBar = React.memo(({ data, keys }) => {
                     wrapperStyle={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', paddingBottom: '30px', textTransform: 'uppercase' }}
                 />
                 {bars}
-                <Line type="monotone" dataKey="total" stroke="transparent" strokeWidth={0} dot={false} activeDot={false}>
-                    <LabelList dataKey="total" position="top" fill="#ffffff" fontSize={13} fontWeight="900" formatter={(val) => val.toLocaleString()} offset={10} />
-                </Line>
             </BarChart>
         </ResponsiveContainer>
     );
@@ -291,19 +375,24 @@ const LocalFilterSection = React.memo(({ title, configs, filters, onFilterChange
         </div>
         {isOpen && (
             <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-6 border-t border-white/10">
-                {configs.map((config) => (
-                    <div key={config.key} className="space-y-2">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">{config.label}</label>
-                        <select
-                            className="w-full bg-[#0b2241] border border-white/20 text-slate-200 text-[11px] font-bold rounded-xl py-3 px-4 outline-none uppercase shadow-sm focus:border-indigo-400 transition-all appearance-none cursor-pointer"
-                            value={filters[config.key] || ''}
-                            onChange={(e) => onFilterChange(config.key, e.target.value)}
-                        >
-                            <option value="">TODOS</option>
-                            {config.options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                        </select>
-                    </div>
-                ))}
+                {configs.map((config) => {
+                    const isExcluir = config.key === 'excluir_cargos';
+                    return (
+                        <div key={config.key} className="space-y-2">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">
+                                {config.label}
+                            </label>
+                            <select
+                                className="w-full bg-[#0b2241] border border-white/20 text-slate-200 text-[11px] font-bold rounded-xl py-3 px-4 outline-none uppercase shadow-sm focus:border-indigo-400 transition-all appearance-none cursor-pointer"
+                                value={filters[config.key] || ''}
+                                onChange={(e) => onFilterChange(config.key, e.target.value)}
+                            >
+                                <option value="">{isExcluir ? 'NINGUNO' : 'TODOS'}</option>
+                                {config.options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                            </select>
+                        </div>
+                    );
+                })}
             </div>
         )}
     </div>
@@ -315,43 +404,118 @@ LocalFilterSection.displayName = 'LocalFilterSection';
 const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleColumns, onToggleColumn, exportButton }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const handleMenuToggle = useCallback(() => setIsMenuOpen(prev => !prev), []);
+    
+    const handleSelectAll = useCallback(() => {
+        allColumns.forEach(col => {
+            if (!visibleColumns.includes(col.key)) {
+                onToggleColumn(col.key);
+            }
+        });
+    }, [allColumns, visibleColumns, onToggleColumn]);
+
+    const handleDeselectAll = useCallback(() => {
+        visibleColumns.forEach(key => {
+            onToggleColumn(key);
+        });
+    }, [visibleColumns, onToggleColumn]);
 
     return (
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <div className="relative w-full md:flex-1 md:max-w-lg">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            {/* CAMPO DE BÚSQUEDA - MEJORADO */}
+            <div className="relative w-full md:flex-1 md:max-w-lg group">
+                <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 rounded-[1rem] blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400/80 transition-colors group-focus-within:text-cyan-300">
+                    <Search size={18} />
+                </div>
                 <input
                     type="text"
                     value={searchValue}
                     placeholder="Buscar..."
-                    className="w-full pl-12 pr-4 py-3 bg-[#0b2241]/60 backdrop-blur-md border border-white/10 rounded-[1rem] text-[11px] font-bold text-white placeholder-slate-400 outline-none"
+                    className="relative w-full pl-12 pr-4 py-3 bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-lg border border-cyan-500/40 rounded-[1rem] text-[11px] font-bold text-white placeholder-slate-400 outline-none transition-all duration-300 focus:border-cyan-400/80 focus:shadow-[0_0_20px_rgba(34,211,235,0.3)] focus:bg-gradient-to-br focus:from-slate-800/90 focus:to-slate-900/90"
                     onChange={(e) => onSearch(e.target.value)}
                 />
             </div>
+
+            {/* BOTÓN DE COLUMNAS - MEJORADO */}
             <div className="relative w-full md:w-auto">
                 <button
                     onClick={handleMenuToggle}
-                    className="w-full md:w-auto flex items-center justify-center gap-2 bg-white/5 border border-white/10 px-5 py-3 rounded-[1rem] hover:bg-white/10 transition-colors"
+                    className="w-full md:w-auto flex items-center justify-center gap-2 px-5 py-3 rounded-[1rem] font-black text-[10px] uppercase transition-all duration-300 bg-gradient-to-r from-indigo-600/80 to-purple-600/80 border border-indigo-400/60 hover:border-indigo-300/80 hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] hover:from-indigo-600 hover:to-purple-600 text-indigo-100 hover:text-white relative overflow-hidden group"
                 >
-                    <Columns size={16} className="text-indigo-400" />
-                    <span className="text-[10px] font-black text-slate-200 uppercase">Columnas</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-cyan-400/0 to-blue-400/0 group-hover:from-cyan-400/20 group-hover:to-blue-400/20 transition-all duration-300"></div>
+                    <Columns size={16} className="relative z-10 transition-transform group-hover:scale-110" />
+                    <span className="relative z-10">Columnas</span>
                 </button>
+
+                {/* MENÚ DE COLUMNAS - MEJORADO CON VER TODAS / OCULTAR TODAS */}
                 {isMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-full md:w-64 bg-[#0b2241] rounded-2xl shadow-2xl border border-white/10 z-[60] p-4 max-h-80 overflow-y-auto">
-                        {allColumns.map((col) => (
-                            <label key={col.key} className="flex items-center gap-3 cursor-pointer p-2 hover:bg-white/5 rounded-lg transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={visibleColumns.includes(col.key)}
-                                    onChange={() => onToggleColumn(col.key)}
-                                    className="rounded bg-slate-800 border-slate-600 text-indigo-500 w-4 h-4"
-                                />
-                                <span className="text-[10px] font-bold uppercase text-slate-300">{col.label}</span>
-                            </label>
-                        ))}
+                    <div className="absolute right-0 top-full mt-3 w-full md:w-80 bg-gradient-to-b from-slate-800/98 to-slate-900/98 backdrop-blur-xl rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] border border-indigo-500/40 z-[60] overflow-hidden transition-all duration-200">
+                        {/* HEADER CON TÍTULO */}
+                        <div className="px-5 py-4 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border-b border-indigo-500/30">
+                            <p className="text-[10px] font-black text-indigo-200 uppercase tracking-wider">Seleccionar Columnas</p>
+                        </div>
+
+                        {/* BOTONES VER TODAS / OCULTAR TODAS */}
+                        <div className="px-5 py-3 border-b border-indigo-500/20 flex gap-2">
+                            <button
+                                onClick={handleSelectAll}
+                                className="flex-1 px-3 py-2 text-[9px] font-black uppercase rounded-lg bg-emerald-600/40 hover:bg-emerald-600/60 border border-emerald-500/40 hover:border-emerald-400/60 text-emerald-200 hover:text-emerald-100 transition-all duration-200"
+                            >
+                                Ver Todas
+                            </button>
+                            <button
+                                onClick={handleDeselectAll}
+                                className="flex-1 px-3 py-2 text-[9px] font-black uppercase rounded-lg bg-rose-600/40 hover:bg-rose-600/60 border border-rose-500/40 hover:border-rose-400/60 text-rose-200 hover:text-rose-100 transition-all duration-200"
+                            >
+                                Ocultar Todas
+                            </button>
+                        </div>
+
+                        {/* LISTA DE COLUMNAS CON SCROLL */}
+                        <div className="max-h-72 overflow-y-auto">
+                            <div className="px-3 py-2">
+                                {allColumns.map((col, idx) => (
+                                    <label 
+                                        key={col.key} 
+                                        className={`flex items-center gap-3 cursor-pointer px-4 py-2.5 rounded-lg transition-all duration-200 group/item ${
+                                            idx % 2 === 0 ? 'bg-slate-800/40' : 'bg-slate-800/20'
+                                        } hover:bg-indigo-500/15 border border-transparent hover:border-indigo-500/30`}
+                                    >
+                                        <div className="relative flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                checked={visibleColumns.includes(col.key)}
+                                                onChange={() => onToggleColumn(col.key)}
+                                                className="w-4 h-4 rounded bg-slate-700 border-2 border-indigo-400/40 text-indigo-500 cursor-pointer accent-indigo-500 group-hover/item:border-indigo-400/70 transition-all appearance-none checked:bg-indigo-600 checked:border-indigo-500"
+                                            />
+                                            <svg 
+                                                className="absolute w-3 h-3 text-white pointer-events-none opacity-0 group-hover/item:opacity-100 transition-opacity"
+                                                fill="none" 
+                                                stroke="currentColor" 
+                                                viewBox="0 0 24 24"
+                                                style={{
+                                                    display: visibleColumns.includes(col.key) ? 'block' : 'none',
+                                                    opacity: visibleColumns.includes(col.key) ? 1 : 0
+                                                }}
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
+                                        <span className="text-[10px] font-bold uppercase text-slate-200 group-hover/item:text-indigo-100 transition-colors flex-1">
+                                            {col.label}
+                                        </span>
+                                        {visibleColumns.includes(col.key) && (
+                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                                        )}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
+
+            {/* BOTÓN DE EXCEL - MEJORADO */}
             {exportButton && <div className="w-full md:w-auto">{exportButton}</div>}
         </div>
     );
@@ -360,14 +524,31 @@ TableToolbar.displayName = 'TableToolbar';
 
 // ─── VISTA DE TABLA ────────────────────────────────────────────────────────────
 
-const TableView = React.memo(({ data, columns, pagination, onPageChange, loading, title }) => (
+const TableView = React.memo(({ data, columns, pagination, onPageChange, loading, title, totalVisible }) => (
     <div className="bg-[#0b2241]/80 backdrop-blur-xl rounded-[1.5rem] border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.5)] overflow-hidden mb-10">
         <div className="p-5 bg-white/5 border-b border-white/10 flex justify-between items-center">
             <h4 className="text-[11px] font-black text-slate-200 uppercase tracking-widest">{title}</h4>
-            <div className="px-3 py-1.5 bg-indigo-500/20 border border-indigo-500/30 rounded-lg">
-                <span className="text-[10px] font-black text-indigo-300 uppercase">
-                    Mostrando: {(data.length || 0).toLocaleString()} registros
-                </span>
+            <div className="flex items-center gap-2">
+                {totalVisible !== null && totalVisible !== undefined ? (
+                    <>
+                        <div className="px-3 py-1.5 bg-amber-500/20 border border-amber-500/30 rounded-lg">
+                            <span className="text-[10px] font-black text-amber-300 uppercase">
+                                Visible: {(totalVisible).toLocaleString()} registros
+                            </span>
+                        </div>
+                        <div className="px-3 py-1.5 bg-slate-700/40 border border-slate-500/30 rounded-lg">
+                            <span className="text-[10px] font-black text-slate-400 uppercase">
+                                Total: {(pagination.total_records || 0).toLocaleString()}
+                            </span>
+                        </div>
+                    </>
+                ) : (
+                    <div className="px-3 py-1.5 bg-indigo-500/20 border border-indigo-500/30 rounded-lg">
+                        <span className="text-[10px] font-black text-indigo-300 uppercase">
+                            Total: {(pagination.total_records || 0).toLocaleString()} registros
+                        </span>
+                    </div>
+                )}
             </div>
         </div>
 
@@ -437,45 +618,13 @@ const TableView = React.memo(({ data, columns, pagination, onPageChange, loading
 ));
 TableView.displayName = 'TableView';
 
-// ─── BOTÓN DE EXPORTACIÓN ─────────────────────────────────────────────────────
+// ─── BOTÓN DE EXPORTACIÓN - MEJORADO ──────────────────────────────────────────
 
-const ExportButton = React.memo(({ exportState, onExport }) => {
-    const { loading, progress } = exportState;
+// ─── BOTÓN DE EXPORTACIÓN (IMPORTADO DE ExportExcel.jsx) ──────────────────────
+// El componente ExportExcel está definido en un archivo separado
+// y exporta: ExportExcel component con NotificationToast integrado
 
-    return (
-        <button
-            onClick={onExport}
-            disabled={loading}
-            title="Exportar tabla a Excel"
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 rounded-[1rem] transition-all disabled:opacity-70 disabled:cursor-not-allowed group"
-        >
-            {loading ? (
-                <>
-                    <div className="w-3.5 h-3.5 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin flex-shrink-0" />
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-20 h-1.5 bg-emerald-900/60 rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-emerald-400 rounded-full transition-all duration-500"
-                                style={{ width: `${progress}%` }}
-                            />
-                        </div>
-                        <span className="text-[10px] font-black text-emerald-300 uppercase tabular-nums">
-                            {progress}%
-                        </span>
-                    </div>
-                </>
-            ) : (
-                <>
-                    <Download size={14} className="text-emerald-400 group-hover:scale-110 transition-transform" />
-                    <span className="text-[10px] font-black text-emerald-300 uppercase">Excel</span>
-                </>
-            )}
-        </button>
-    );
-});
-ExportButton.displayName = 'ExportButton';
 
-// ─── DEFINICIÓN ESTÁTICA DE COLUMNAS ──────────────────────────────────────────
 
 const ALL_COLUMNS_GESTION = [
     { key: 'CALL_CENTER_FILTRO',  label: 'Filtro Call Center'    },
@@ -570,25 +719,20 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
     const [visibleColsGestion,    setVisibleColsGestion]    = useState(['Cedula_Cliente', 'Nombre_Cliente', 'Estado_Gestion', 'Estado_Pago', 'Regional_Cobro', 'Novedad']);
     const [visibleColsRodamiento, setVisibleColsRodamiento] = useState(['Credito', 'Cedula_Cliente', 'Rodamiento', 'Franja_Cartera', 'Valor_Vencido']);
-    const EXPORT_INITIAL = { loading: false, progress: 0 };
-    const [exportGestion,    setExportGestion]    = useState(EXPORT_INITIAL);
-    const [exportRodamiento, setExportRodamiento] = useState(EXPORT_INITIAL);
-    const pollRefGestion    = useRef(null);
-    const pollRefRodamiento = useRef(null);
 
     // ── HELPERS ───────────────────────────────────────────────────────────────
 
-    // MODIFICADO: AHORA INCLUYE LÓGICA FRONTEND PARA OCULTAR EL CARGO EN LAS GRÁFICAS
     const applyGlobalFilters = useCallback((dataSet) => {
         if (!Array.isArray(dataSet)) return [];
 
-        // 1. Aplicamos el filtro frontal (excluir_cargos)
         let filteredSet = dataSet;
         if (localFiltersGestion.excluir_cargos) {
-            filteredSet = filteredSet.filter(item => item.Cargo_Usuario !== localFiltersGestion.excluir_cargos);
+            const excluirNorm = String(localFiltersGestion.excluir_cargos).trim().toUpperCase();
+            filteredSet = filteredSet.filter(
+                item => String(item.Cargo_Usuario ?? '').trim().toUpperCase() !== excluirNorm
+            );
         }
 
-        // 2. Aplicamos el resto de los filtros globales
         const entries = Object.entries(selectedFilters || {});
         if (entries.length === 0) return filteredSet;
 
@@ -598,7 +742,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
                 return values.includes(item[key]);
             })
         );
-    }, [selectedFilters, localFiltersGestion.excluir_cargos]); // Importante dependencia
+    }, [selectedFilters, localFiltersGestion.excluir_cargos]);
 
     const buildSunburstData = useCallback((list, mainKey, subKey, valKey) => {
         const source = Array.isArray(list) ? list : (list?.grouped || []);
@@ -643,19 +787,30 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
     // ── FETCH CON DEBOUNCE ────────────────────────────────────────────────────
 
-    const fetchTableData = useCallback(async (source, page = 1, search = '', filters = {}, setter) => {
+    const fetchTableData = useCallback(async (source, page = 1, search = '', localFilters = {}, setter) => {
         if (!jobId) return;
-        setter(prev => ({ ...prev, loading: true, search }));
-
         try {
+            setter(prev => ({ ...prev, loading: true }));
+            
+            // 1. Formatear los filtros locales
             const formattedFilters = {};
-            Object.entries(filters).forEach(([key, value]) => {
-                // MODIFICADO: Ignorar "excluir_cargos" para que el backend no falle
-                if (value !== '' && value !== null && value !== undefined && key !== 'excluir_cargos') {
-                    const backendKey = key.toLowerCase() === 'cargo_usuario' ? 'cargos' : key.toLowerCase();
-                    formattedFilters[backendKey] = [value];
+            Object.entries(localFilters).forEach(([key, value]) => {
+                if (value && key !== 'excluir_cargos') { 
+                    formattedFilters[key] = [value];
                 }
             });
+
+            // 2. INTEGRAR FILTROS GLOBALES (selectedFilters) CON CONVERSIÓN A MINÚSCULAS
+            const mergedFilters = { ...formattedFilters };
+            if (selectedFilters && Object.keys(selectedFilters).length > 0) {
+                Object.entries(selectedFilters).forEach(([key, values]) => {
+                    if (values && values.length > 0) {
+                        // Transformar la llave a minúsculas para que coincida exactamente con el WalletController
+                        const backendKey = key.toLowerCase(); 
+                        mergedFilters[backendKey] = values;
+                    }
+                });
+            }
 
             const payload = {
                 job_id: jobId,
@@ -663,32 +818,43 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
                 page,
                 page_size: 15,
                 search_term: search,
-                ...formattedFilters
+                ...mergedFilters // Se envían con las llaves en minúsculas
             };
 
             const response = await apiClient.post('/wallet/buscar', payload);
+            
             setter(prev => ({
                 ...prev,
                 data: response.data.data || [],
                 loading: false,
                 pagination: {
-                    current:      response.data.meta?.page  || page,
-                    total_pages:  response.data.meta?.pages || 0,
+                    current: response.data.meta?.page || page,
+                    total_pages: response.data.meta?.pages || 0,
                     total_records: response.data.meta?.total || 0
                 }
             }));
         } catch {
             setter(prev => ({ ...prev, loading: false }));
         }
-    }, [jobId, apiClient]);
+    }, [jobId, apiClient, selectedFilters]);
+
+    useEffect(() => {
+        if (jobId) {
+            // Al cambiar selectedFilters o jobId, refrescamos ambas tablas en la página 1
+            const { excluir_cargos: _exc, ...filtersGestionBackend } = localFiltersGestion;
+            fetchTableData('seguimientos_gestion', 1, gestionTable.search, filtersGestionBackend, setGestionTable);
+            fetchTableData('seguimientos_rodamientos', 1, rodamientoTable.search, localFiltersRodamiento, setRodamientoTable);
+        }
+    }, [jobId, selectedFilters, fetchTableData]);
 
     const debounceGestion     = useRef(null);
     const debounceRodamiento  = useRef(null);
 
     const handleSearchGestion = useCallback((value) => {
         clearTimeout(debounceGestion.current);
+        const { excluir_cargos: _exc, ...filtersParaBackend } = localFiltersGestion;
         debounceGestion.current = setTimeout(() => {
-            fetchTableData('seguimientos_gestion', 1, value, localFiltersGestion, setGestionTable);
+            fetchTableData('seguimientos_gestion', 1, value, filtersParaBackend, setGestionTable);
         }, 350);
     }, [fetchTableData, localFiltersGestion]);
 
@@ -714,93 +880,13 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
     const toggleFiltersGestion    = useCallback(() => setShowLocalFiltersGestion(prev => !prev), []);
     const toggleFiltersRodamiento = useCallback(() => setShowLocalFiltersRodamiento(prev => !prev), []);
 
-    // ── EXPORTACIÓN ───────────────────────────────────────────────────────────
+    const handleExportGestion    = useCallback(() => {}, []);
+    const handleExportRodamiento = useCallback(() => {}, []);
 
-    const triggerFileDownload = useCallback((blob, fileName) => {
-        const blobUrl = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(blobUrl);
-    }, []);
-
-    const handleExport = useCallback(async (origen, filters, setExportState, pollRef) => {
-        if (pollRef.current) {
-            clearTimeout(pollRef.current);
-            pollRef.current = null;
-        }
-
-        const formattedFilters = {};
-        Object.entries(filters).forEach(([key, value]) => {
-            // MODIFICADO: Ignorar "excluir_cargos" para exportación del backend
-            if (value !== '' && value !== null && value !== undefined && key !== 'excluir_cargos') {
-                const backendKey = key.toLowerCase() === 'cargo_usuario' ? 'cargos' : key.toLowerCase();
-                formattedFilters[backendKey] = [value];
-            }
-        });
-
-        const payload = { job_id: jobId, origen, ...formattedFilters };
-        setExportState({ loading: true, progress: 5 });
-
-        try {
-            const res = await apiClient.post('/wallet/export', payload);
-            const { status, file } = res.data;
-
-            if (status === 'ready') {
-                setExportState({ loading: true, progress: 100 });
-                const direct = await apiClient.get(`/wallet/download/${file}`, { responseType: 'blob' });
-                triggerFileDownload(new Blob([direct.data]), file);
-                setTimeout(() => setExportState({ loading: false, progress: 0 }), 2000);
-                return;
-            }
-
-            let simProgress = 10;
-            const poll = async () => {
-                if (!pollRef.current) return;
-                simProgress = Math.min(simProgress + 7, 92);
-                setExportState({ loading: true, progress: simProgress });
-
-                try {
-                    const pollRes = await apiClient.get(`/wallet/download/${file}`, { responseType: 'blob' });
-                    const contentType = pollRes.headers?.['content-type'] || '';
-
-                    if (contentType.includes('application/json')) {
-                        pollRef.current = setTimeout(poll, 3000);
-                        return;
-                    }
-
-                    pollRef.current = null;
-                    triggerFileDownload(new Blob([pollRes.data]), file);
-                    setExportState({ loading: true, progress: 100 });
-                    setTimeout(() => setExportState({ loading: false, progress: 0 }), 2000);
-
-                } catch {
-                    pollRef.current = null;
-                    setExportState({ loading: false, progress: 0 });
-                }
-            };
-
-            pollRef.current = setTimeout(poll, 3000);
-
-        } catch {
-            setExportState({ loading: false, progress: 0 });
-        }
-    }, [jobId, apiClient, triggerFileDownload]);
-
-    const handleExportGestion    = useCallback(() =>
-        handleExport('seguimientos_gestion',     localFiltersGestion,    setExportGestion,    pollRefGestion),
-    [handleExport, localFiltersGestion]);
-
-    const handleExportRodamiento = useCallback(() =>
-        handleExport('seguimientos_rodamientos', localFiltersRodamiento, setExportRodamiento, pollRefRodamiento),
-    [handleExport, localFiltersRodamiento]);
-
-    const pageGestion = useCallback((p) =>
-        fetchTableData('seguimientos_gestion',     p, gestionTable.search,    localFiltersGestion,    setGestionTable), 
-    [fetchTableData, gestionTable.search, localFiltersGestion]);
+    const pageGestion = useCallback((p) => {
+        const { excluir_cargos: _exc, ...filtersParaBackend } = localFiltersGestion;
+        fetchTableData('seguimientos_gestion', p, gestionTable.search, filtersParaBackend, setGestionTable);
+    }, [fetchTableData, gestionTable.search, localFiltersGestion]);
 
     const pageRodamiento = useCallback((p) =>
         fetchTableData('seguimientos_rodamientos', p, rodamientoTable.search, localFiltersRodamiento, setRodamientoTable),
@@ -808,20 +894,20 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
     // ── EFFECTS ───────────────────────────────────────────────────────────────
 
+    const backendFiltersGestion = useMemo(() => ({
+        Estado_Pago:    localFiltersGestion.Estado_Pago,
+        Estado_Gestion: localFiltersGestion.Estado_Gestion,
+        Cargo_Usuario:  localFiltersGestion.Cargo_Usuario,
+    }), [localFiltersGestion.Estado_Pago, localFiltersGestion.Estado_Gestion, localFiltersGestion.Cargo_Usuario]);
+
     useEffect(() => {
-        if (jobId) fetchTableData('seguimientos_gestion', 1, gestionTable.search, localFiltersGestion, setGestionTable);
-    }, [localFiltersGestion, jobId, fetchTableData]);
+        if (jobId) fetchTableData('seguimientos_gestion', 1, gestionTable.search, backendFiltersGestion, setGestionTable);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [backendFiltersGestion, jobId]);
 
     useEffect(() => {
         if (jobId) fetchTableData('seguimientos_rodamientos', 1, rodamientoTable.search, localFiltersRodamiento, setRodamientoTable);
     }, [localFiltersRodamiento, jobId, fetchTableData]);
-
-    useEffect(() => {
-        return () => {
-            if (pollRefGestion.current)    clearTimeout(pollRefGestion.current);
-            if (pollRefRodamiento.current) clearTimeout(pollRefRodamiento.current);
-        };
-    }, []);
 
     // ── DATOS PROCESADOS ──────────────────────────────────────────────────────
 
@@ -847,7 +933,6 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
         };
     }, [data, applyGlobalFilters, buildSunburstData, processStackedBarData]);
 
-    // MODIFICADO: Agregada la llave correcta `excluir_cargos` en filterConfigsGestion
     const filterConfigsGestion = useMemo(() => {
         const opcionesCargos = [...new Set(((data?.sunburst_grouped || data?.donut_data) || []).map(x => x.Cargo_Usuario).filter(Boolean))];
         return [
@@ -877,11 +962,25 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
     const columnsGestion    = useMemo(() => ALL_COLUMNS_GESTION.filter(c    => visibleColsGestion.includes(c.key)),    [visibleColsGestion]);
     const columnsRodamiento = useMemo(() => ALL_COLUMNS_RODAMIENTO.filter(c => visibleColsRodamiento.includes(c.key)), [visibleColsRodamiento]);
 
-    // MODIFICADO: Memoria para filtrar frontalmente la tabla y que no se muestre el cargo excluido
     const filteredGestionTableData = useMemo(() => {
         if (!localFiltersGestion.excluir_cargos) return gestionTable.data;
-        return gestionTable.data.filter(row => row.Cargo_Usuario !== localFiltersGestion.excluir_cargos);
+        const excluirNorm = String(localFiltersGestion.excluir_cargos).trim().toUpperCase();
+        return gestionTable.data.filter(
+            row => String(row.Cargo_Usuario ?? '').trim().toUpperCase() !== excluirNorm
+        );
     }, [gestionTable.data, localFiltersGestion.excluir_cargos]);
+
+    const totalVisibleGestion = useMemo(() => {
+        if (!localFiltersGestion.excluir_cargos || !gestionTable.pagination.total_records) return null;
+        const excluirNorm    = String(localFiltersGestion.excluir_cargos).trim().toUpperCase();
+        const totalPagina    = gestionTable.data.length;
+        const excluidosPag   = gestionTable.data.filter(
+            row => String(row.Cargo_Usuario ?? '').trim().toUpperCase() === excluirNorm
+        ).length;
+        if (totalPagina === 0) return gestionTable.pagination.total_records;
+        const fracExcluida   = excluidosPag / totalPagina;
+        return Math.round(gestionTable.pagination.total_records * (1 - fracExcluida));
+    }, [localFiltersGestion.excluir_cargos, gestionTable.data, gestionTable.pagination.total_records]);
 
     if (!charts) return null;
 
@@ -894,7 +993,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 <ChartCard
                     title="Estado de Vigencia y Recaudo"
-                    subtitle="Distribución por estado actual de cartera"
+                    subtitle=""
                     isEmpty={charts.recaudo.length === 0}
                 >
                     <InteractiveSunburstPlotly
@@ -905,7 +1004,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
                 <ChartCard
                     title="Distribución de Gestión"
-                    subtitle="Cargos por cada estado de gestión"
+                    subtitle=""
                     isEmpty={charts.gestion.level1.length === 0}
                 >
                     <InteractiveSunburstPlotly
@@ -917,7 +1016,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
                 <ChartCard
                     title="Gestión con Pago"
-                    subtitle="Eficiencia de cobro por cargo"
+                    subtitle=""
                     isEmpty={charts.conPago.level1.length === 0}
                 >
                     <InteractiveSunburstPlotly
@@ -929,7 +1028,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
                 <ChartCard
                     title="Gestión sin Pago"
-                    subtitle="Cartera gestionada pendiente de recaudo"
+                    subtitle=""
                     isEmpty={charts.sinPago.level1.length === 0}
                 >
                     <InteractiveSunburstPlotly
@@ -957,19 +1056,21 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
                     visibleColumns={visibleColsGestion}
                     onToggleColumn={toggleColGestion}
                     exportButton={
-                        <ExportButton
-                            exportState={exportGestion}
+                        <ExportExcel
                             onExport={handleExportGestion}
+                            tableTitle="Reporte Detallado de Gestión"
+                            isAvailable={false}
                         />
                     }
                 />
                 <TableView
                     title="Reporte Detallado de Gestión"
-                    data={filteredGestionTableData} // <-- AHORA PASA LA DATA FILTRADA FRONTALMENTE
+                    data={filteredGestionTableData}
                     columns={columnsGestion}
                     loading={gestionTable.loading}
                     pagination={gestionTable.pagination}
                     onPageChange={pageGestion}
+                    totalVisible={totalVisibleGestion}
                 />
             </div>
 
@@ -1001,9 +1102,10 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
                     visibleColumns={visibleColsRodamiento}
                     onToggleColumn={toggleColRodamiento}
                     exportButton={
-                        <ExportButton
-                            exportState={exportRodamiento}
+                        <ExportExcel
                             onExport={handleExportRodamiento}
+                            tableTitle="Reporte Detallado de Rodamientos"
+                            isAvailable={false}
                         />
                     }
                 />
