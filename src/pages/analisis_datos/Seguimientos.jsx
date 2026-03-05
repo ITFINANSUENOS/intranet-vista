@@ -620,12 +620,6 @@ TableView.displayName = 'TableView';
 
 // ─── BOTÓN DE EXPORTACIÓN - MEJORADO ──────────────────────────────────────────
 
-// ─── BOTÓN DE EXPORTACIÓN (IMPORTADO DE ExportExcel.jsx) ──────────────────────
-// El componente ExportExcel está definido en un archivo separado
-// y exporta: ExportExcel component con NotificationToast integrado
-
-
-
 const ALL_COLUMNS_GESTION = [
     { key: 'CALL_CENTER_FILTRO',  label: 'Filtro Call Center'    },
     { key: 'Cargo_Usuario',       label: 'Cargo Usuario'         },
@@ -817,8 +811,8 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
                 page,
                 page_size: 15,
                 search_term: search,
-                ...formattedFilters,        // Filtros locales de la tabla
-                ...mappedGlobalFilters      // ✅ NUEVO: Filtros globales del dashboard
+                ...formattedFilters,        
+                ...mappedGlobalFilters     
             };
 
             const response = await apiClient.post('/wallet/buscar', payload);
@@ -835,7 +829,7 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
         } catch {
             setter(prev => ({ ...prev, loading: false }));
         }
-    }, [jobId, apiClient, selectedFilters]); // ✅ AGREGAR selectedFilters a dependencias
+    }, [jobId, apiClient, selectedFilters]); 
 
     const debounceGestion     = useRef(null);
     const debounceRodamiento  = useRef(null);
@@ -974,9 +968,47 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
     if (!charts) return null;
 
+    const filtrosRodamientoExport = useMemo(() => {
+    const global = {};
+    Object.entries(selectedFilters || {}).forEach(([key, values]) => {
+        if (Array.isArray(values) && values.length > 0) global[key.toLowerCase()] = values;
+    });
+
+    return {
+        job_id: jobId,
+        origen: 'seguimientos_rodamientos', // Indica a Python que use el archivo de rodamientos
+        search_term: rodamientoTable.search || '',
+        page: rodamientoTable.pagination?.currentPage || 1,
+        page_size: rodamientoTable.pagination?.pageSize || 15,
+        columnas_visibles: visibleColsRodamiento, // Solo las columnas marcadas como visibles
+        ...localFiltersRodamiento,
+        ...global
+    };
+}, [jobId, rodamientoTable, visibleColsRodamiento, localFiltersRodamiento, selectedFilters]);
+
+
+// --- FILTROS PARA LA TABLA DE GESTIÓN ---
+const filtrosGestionExport = useMemo(() => {
+    const global = {};
+    Object.entries(selectedFilters || {}).forEach(([key, values]) => {
+        if (Array.isArray(values) && values.length > 0) global[key.toLowerCase()] = values;
+    });
+
+    return {
+        job_id: jobId,
+        origen: 'seguimientos_gestion', // Indica a Python que use el archivo de gestión
+        search_term: gestionTable.search || '',
+        page: gestionTable.pagination?.currentPage || 1,
+        page_size: gestionTable.pagination?.pageSize || 15,
+        columnas_visibles: visibleColsGestion, // Asegúrate de que esta variable exista para la tabla gestión
+        ...localFiltersGestion,
+        ...global
+    };
+}, [jobId, gestionTable, visibleColsGestion, localFiltersGestion, selectedFilters]);
     // ── RENDER ────────────────────────────────────────────────────────────────
 
     return (
+        
         <div className="space-y-12 animate-in fade-in duration-700 p-4">
 
             {/* GRÁFICOS SUNBURST */}
@@ -1040,19 +1072,20 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
                     configs={filterConfigsGestion}
                 />
                 <TableToolbar
-                    onSearch={handleSearchGestion}
-                    searchValue={gestionTable.search}
-                    allColumns={ALL_COLUMNS_GESTION}
-                    visibleColumns={visibleColsGestion}
-                    onToggleColumn={toggleColGestion}
-                    exportButton={
-                        <ExportExcel
-                            onExport={handleExportGestion}
-                            tableTitle="Reporte Detallado de Gestión"
-                            isAvailable={false}
-                        />
-                    }
-                />
+    onSearch={handleSearchGestion} // Tu función de búsqueda de gestión
+    searchValue={gestionTable.search}
+    allColumns={ALL_COLUMNS_GESTION} // Asegúrate de usar las columnas de gestión
+    visibleColumns={visibleColsGestion}
+    onToggleColumn={toggleColGestion}
+    exportButton={
+        <ExportExcel 
+            isAvailable={true} 
+            filtros={filtrosGestionExport} // Usa los filtros de Gestión
+            fileName={`Gestion_${jobId}.xlsx`} 
+            tableTitle="Gestión"
+        />
+    }
+/>
                 <TableView
                     title="Reporte Detallado de Gestión"
                     data={filteredGestionTableData}
@@ -1086,19 +1119,20 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
                     ]}
                 />
                 <TableToolbar
-                    onSearch={handleSearchRodamiento}
-                    searchValue={rodamientoTable.search}
-                    allColumns={ALL_COLUMNS_RODAMIENTO}
-                    visibleColumns={visibleColsRodamiento}
-                    onToggleColumn={toggleColRodamiento}
-                    exportButton={
-                        <ExportExcel
-                            onExport={handleExportRodamiento}
-                            tableTitle="Reporte Detallado de Rodamientos"
-                            isAvailable={false}
-                        />
-                    }
-                />
+    onSearch={handleSearchRodamiento}
+    searchValue={rodamientoTable.search}
+    allColumns={ALL_COLUMNS_RODAMIENTO}
+    visibleColumns={visibleColsRodamiento}
+    onToggleColumn={toggleColRodamiento}
+    exportButton={
+        <ExportExcel 
+            isAvailable={true} 
+            filtros={filtrosRodamientoExport} // Usa los filtros de Rodamiento
+            fileName={`Rodamientos_${jobId}.xlsx`} 
+            tableTitle="Rodamientos"
+        />
+    }
+/>
                 <TableView
                     title="Reporte Detallado de Rodamientos"
                     data={rodamientoTable.data}

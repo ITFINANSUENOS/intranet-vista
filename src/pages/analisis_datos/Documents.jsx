@@ -38,7 +38,8 @@ export default function Documents() {
         Zona: [], 
         Regional_Cobro: [], 
         Franja_Cartera: [],
-        Novedades: []
+        Novedades: [],
+        Estado_Vigencia: []
     });
 
     const hasActiveFilters = useMemo(() => {
@@ -142,14 +143,15 @@ export default function Documents() {
 
     // 3. Optimización O(N) para Extracción de Filtros
     const filterOptions = useMemo(() => {
-        const keys = ['Empresa', 'CALL_CENTER_FILTRO', 'Zona', 'Regional_Cobro', 'Franja_Cartera'];
+        const keys = ['Empresa', 'CALL_CENTER_FILTRO', 'Zona', 'Regional_Cobro', 'Franja_Cartera', 'Estado_Vigencia'];
         
         const sets = {
             Empresa: new Set(),
             CALL_CENTER_FILTRO: new Set(),
             Zona: new Set(),
             Regional_Cobro: new Set(),
-            Franja_Cartera: new Set()
+            Franja_Cartera: new Set(),
+            Estado_Vigencia: new Set()
         };
 
         const extractFilters = (dataArray) => {
@@ -190,7 +192,7 @@ export default function Documents() {
     }, []);
 
     const handleClearFilters = useCallback(() => {
-        setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [], Novedades: [] });
+        setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [], Novedades: [], Estado_Vigencia: []});
     }, []);
 
     return (

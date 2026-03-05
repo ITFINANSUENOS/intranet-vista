@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Database, Search, ChevronDown, ChevronUp, Columns, ChevronLeft, ChevronRight } from 'lucide-react';
-import ExportExcel from "../../components/cartera_buttons/ExportExcel"; // Asegúrate de que la ruta sea correcta
+import ExportExcel from "../../components/cartera_buttons/ExportExcel"; // Ajusta la ruta si es necesario
 
-// ─── BARRA DE HERRAMIENTAS DE TABLA (COMO EN SEGUIMIENTOS) ──────────────────
+// ─── BARRA DE HERRAMIENTAS DE TABLA ──────────────────────────────────────────
 const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleColumns, onToggleColumn, exportButton }) => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [columnSearch, setColumnSearch] = useState(''); // Estado para el buscador de columnas
+    const [columnSearch, setColumnSearch] = useState('');
     
     const handleMenuToggle = useCallback(() => setIsMenuOpen(prev => !prev), []);
     
@@ -19,7 +19,6 @@ const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleCol
         visibleColumns.forEach(key => onToggleColumn(key));
     }, [visibleColumns, onToggleColumn]);
 
-    // Filtrar columnas basadas en el buscador interno
     const filteredColumns = useMemo(() => {
         return allColumns.filter(col => 
             col.label.toLowerCase().includes(columnSearch.toLowerCase())
@@ -28,7 +27,6 @@ const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleCol
 
     return (
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            {/* Buscador Principal */}
             <div className="relative w-full md:flex-1 md:max-w-lg group">
                 <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 rounded-[1rem] blur-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-400/80 transition-colors group-focus-within:text-cyan-300">
@@ -44,7 +42,6 @@ const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleCol
             </div>
 
             <div className="flex items-center gap-3 w-full md:w-auto">
-                {/* Selector de Columnas */}
                 <div className="relative">
                     <button
                         onClick={handleMenuToggle}
@@ -59,8 +56,6 @@ const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleCol
 
                     {isMenuOpen && (
                         <div className="absolute right-0 top-full mt-2 w-72 bg-[#0b1f3a]/95 backdrop-blur-2xl border border-indigo-500/30 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.5)] z-50 overflow-hidden animate-in slide-in-from-top-2 duration-200">
-                            
-                            {/* Header del Menú de Columnas (Buscador + Botones) */}
                             <div className="p-3 border-b border-white/5 bg-[#08182f]/90">
                                 <div className="relative flex items-center mb-3 group/search">
                                     <Search size={14} className="absolute left-3 text-slate-400 group-focus-within/search:text-indigo-400 transition-colors" />
@@ -77,8 +72,6 @@ const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleCol
                                     <button onClick={handleDeselectAll} className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-bold uppercase tracking-wider rounded-lg transition-colors border border-white/5">Ocultar Todas</button>
                                 </div>
                             </div>
-
-                            {/* Lista de Columnas Filtradas */}
                             <div className="max-h-64 overflow-y-auto custom-scrollbar">
                                 <div className="px-3 py-2">
                                     {filteredColumns.length > 0 ? (
@@ -106,7 +99,6 @@ const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleCol
                         </div>
                     )}
                 </div>
-                {/* Botón Excel */}
                 {exportButton}
             </div>
         </div>
@@ -219,31 +211,29 @@ const TablaRemota = ({ titulo, origen, apiClient, jobId, selectedFilters }) => {
         
         setLoading(true);
         try {
-            // 1. Mapear los filtros de React al formato que espera Laravel
             const mappedFilters = {
-                empresa: selectedFilters.Empresa || [],
-                call_center_filtro: selectedFilters.CALL_CENTER_FILTRO || [],
-                zona: selectedFilters.Zona || [],
-                regional_cobro: selectedFilters.Regional_Cobro || [],
-                franja: selectedFilters.Franja_Cartera || [], // Nota: React envía Franja_Cartera, Laravel espera franja
-                novedades: selectedFilters.Novedades || [] 
+                empresa: selectedFilters?.Empresa || [],
+                call_center_filtro: selectedFilters?.CALL_CENTER_FILTRO || [],
+                zona: selectedFilters?.Zona || [],
+                regional_cobro: selectedFilters?.Regional_Cobro || [],
+                franja: selectedFilters?.Franja_Cartera || [], 
+                novedades: selectedFilters?.Novedades || [],
+                estado_vigencia: selectedFilters?.Estado_Vigencia || []
             };
 
-            // 2. Limpiar arrays vacíos para no enviar basura al backend
             Object.keys(mappedFilters).forEach(key => {
                 if (!mappedFilters[key] || mappedFilters[key].length === 0) {
                     delete mappedFilters[key];
                 }
             });
 
-            // 3. Construir el payload
             const payload = {
                 job_id: jobId,
                 origen: origen, 
                 page: pageToFetch,
                 page_size: 20,
                 search_term: searchTerm,
-                ...mappedFilters // Usar los filtros mapeados aquí
+                ...mappedFilters 
             };
             
             const response = await apiClient.post('/wallet/buscar', payload);
@@ -258,13 +248,10 @@ const TablaRemota = ({ titulo, origen, apiClient, jobId, selectedFilters }) => {
                 total_records: metaInfo.total || 0
             });
 
-            // Generar columnas dinámicamente y seleccionar solo las 5 primeras por defecto
             if (items.length > 0 && allColumns.length === 0) {
                 const keys = Object.keys(items[0]).filter(k => k !== 'id' && !k.startsWith('_'));
                 const generatedCols = keys.map(k => ({ key: k, label: k.replace(/_/g, ' ') }));
                 setAllColumns(generatedCols);
-                
-                // LIMITAR A 5 COLUMNAS VISIBLES INICIALMENTE
                 setVisibleColumns(generatedCols.slice(0, 5).map(c => c.key));
             }
 
@@ -295,10 +282,34 @@ const TablaRemota = ({ titulo, origen, apiClient, jobId, selectedFilters }) => {
         setVisibleColumns(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
     }, []);
 
-    const handleExport = useCallback(() => {
-        console.log("Iniciando exportación para:", titulo);
-        // Aquí puedes agregar la petición al backend para generar el archivo Excel o descargar
-    }, [titulo]);
+    // AQUÍ ES DONDE ESTABA EL PROBLEMA: Preparar los datos exactos para la exportación
+    const filtrosExport = useMemo(() => {
+        const mappedFilters = {
+            empresa: selectedFilters?.Empresa || [],
+            call_center_filtro: selectedFilters?.CALL_CENTER_FILTRO || [],
+            zona: selectedFilters?.Zona || [],
+            regional_cobro: selectedFilters?.Regional_Cobro || [],
+            franja: selectedFilters?.Franja_Cartera || [],
+            novedades: selectedFilters?.Novedades || [],
+            estado_vigencia: selectedFilters?.Estado_Vigencia || []
+        };
+
+        Object.keys(mappedFilters).forEach(key => {
+            if (!mappedFilters[key] || mappedFilters[key].length === 0) {
+                delete mappedFilters[key];
+            }
+        });
+
+        return {
+            job_id: jobId, // <-- Aquí está el job_id que pedía el error
+            origen: origen,
+            search_term: search || '',
+            page: 1,
+            page_size: 100000, // Ajuste para traer una buena cantidad de registros en Excel
+            columnas_visibles: visibleColumns, // El backend debe filtrar con base en estas columnas
+            ...mappedFilters
+        };
+    }, [jobId, origen, search, visibleColumns, selectedFilters]);
 
     const columnsToRender = useMemo(() => {
         return allColumns.filter(col => visibleColumns.includes(col.key));
@@ -314,9 +325,10 @@ const TablaRemota = ({ titulo, origen, apiClient, jobId, selectedFilters }) => {
                 onToggleColumn={toggleColumn}
                 exportButton={
                     <ExportExcel
-                        onExport={handleExport}
+                        filtros={filtrosExport} // SE PASAN LOS FILTROS DINÁMICOS AQUÍ
+                        fileName={`${titulo.replace(/\s+/g, '_')}.xlsx`}
                         tableTitle={titulo}
-                        isAvailable={data.length > 0}
+                        isAvailable={data.length > 0 && visibleColumns.length > 0}
                     />
                 }
             />
@@ -338,7 +350,6 @@ export default function DatosDetallados({ apiClient, jobId, selectedFilters }) {
 
     return (
         <div className="space-y-6 p-4">
-            {/* NUEVO ENCABEZADO: Más estético, sobrio y acorde al diseño oscuro */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8 pb-4 border-b border-white/5">
                 <div className="flex items-center gap-4">
                     <div className="p-3 bg-[#061428] border border-white/5 rounded-xl text-indigo-400 shadow-inner">
@@ -348,7 +359,6 @@ export default function DatosDetallados({ apiClient, jobId, selectedFilters }) {
                         <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-slate-200 to-slate-400 uppercase tracking-widest drop-shadow-sm">
                             Explorador de Datos
                         </h2>
-                        
                     </div>
                 </div>
             </div>
