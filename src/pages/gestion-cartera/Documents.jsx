@@ -8,7 +8,8 @@ import Cartera from './Cartera';
 import Seguirientos from './Seguimientos';
 import Resultados from './Resultados';
 import DatosDetallados from './DatosDetallados';
-import Comercial from './Comercial'; 
+import Comercial from './Comercial';
+import CallCenter from './CallCenter';
 
 import FileUploadButton from '../../components/FileUploadButton'; 
 
@@ -26,7 +27,8 @@ export default function Documents() {
     const [moduleData, setModuleData] = useState({ 
         cartera: null, 
         seguimientos: null, 
-        resultados: null 
+        resultados: null,
+        call_center: null
     });
     
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -101,7 +103,7 @@ export default function Documents() {
         let isMounted = true;
 
         const loadTabData = async () => {
-            if (['cartera', 'seguimientos', 'resultados'].includes(activeTab)) {
+            if (['cartera', 'seguimientos', 'resultados', 'call_center'].includes(activeTab)) {
                 if (!moduleData[activeTab]) {
                     setLoading(true);
                     try {
@@ -272,7 +274,7 @@ export default function Documents() {
                     
                     <div className="flex items-center gap-4 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
                         <div className="flex bg-black/20 p-1.5 rounded-xl shrink-0 items-center border border-white/5 shadow-inner">
-                            {['cartera', 'seguimientos', 'detallados', 'resultados', 'comercial'].map(tab => (
+                            {['cartera', 'seguimientos', 'detallados', 'resultados', 'comercial', 'call_center'].map(tab => (
                                 <button 
                                     key={tab} 
                                     onClick={() => setActiveTab(tab)} 
@@ -319,6 +321,14 @@ export default function Documents() {
                             {activeTab === 'detallados' && <DatosDetallados apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
                             {activeTab === 'resultados' && moduleData.resultados && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
                             {activeTab === 'comercial' && <Comercial apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
+                            {activeTab === 'call_center' && moduleData.call_center && (
+    <CallCenter 
+        data={moduleData.call_center} 
+        jobId={selectedJobId} 
+        selectedFilters={selectedFilters} // Añadir esto
+        apiClient={apiClient}             // Añadir esto si necesitas peticiones internas
+    />
+)}
                         </div>
                     )}
                 </main>

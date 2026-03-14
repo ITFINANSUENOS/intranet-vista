@@ -10,13 +10,13 @@ import Home from './pages/Home';
 import Users from './pages/Users';         
 import Roles from './pages/Roles';         
 import Companies from './pages/Companies'; 
-import Documents from './pages/analisis_datos/Documents';
+import Documents from './pages/gestion-cartera/Documents';
 import Positions from './pages/Positions'; 
 import Regionals from './pages/Regionals'; 
 import ObjectivesView from './pages/ObjectivesView';
 import EventsView from './pages/EventsView';
 import NewsView from './pages/NewsView';        
-import DatacreditoProcessingPage from './pages/analisis_datos/DatacreditoProcessingPage';
+import DatacreditoProcessingPage from './pages/gestion-cartera/DatacreditoProcessingPage';
 import CostCenterPage from './pages/CostCenterPage';
 import Herramientas from './pages/Herramientas';
 
