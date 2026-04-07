@@ -146,6 +146,14 @@ const GaugeWithDetailsCard = ({ title, value, meta, recaudo, faltante, isMain = 
 
 // ============= ZONE MINI TABLE =============
 const ZoneMiniTable = ({ title, data, count, jobId}) => {
+
+    const getDynamicColor = (val) => {
+        if (val <= 20) return '#ef4444'; // Rojo
+        if (val <= 40) return '#f59e0b'; // Naranja
+        if (val <= 60) return '#eab308'; // Amarillo
+        if (val <= 80) return '#10b981'; // Verde
+        return '#8b5cf6';                // Morado
+    };
     const { groupedData, totals } = useMemo(() => {
         const groups = {};
         let totalMeta = 0;
@@ -244,13 +252,24 @@ const ZoneMiniTable = ({ title, data, count, jobId}) => {
                             <td className="p-3 text-xs md:text-[13px] font-bold text-emerald-400 text-right font-mono border-r border-slate-700/50">${(row.Recaudo_Total || 0).toLocaleString()}</td>
                             <td className="p-3 text-xs md:text-[13px] font-black text-red-400 text-right font-mono border-r border-slate-700/50">${(row.Faltante_Calc > 0 ? row.Faltante_Calc : 0).toLocaleString()}</td>
                             <td className="p-3 align-middle">
-                                <div className="flex items-center gap-2 w-full justify-center">
-                                    <span className="text-xs font-bold w-12 text-right text-slate-200">{percent.toFixed(1)}%</span>
-                                    <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                        <div className="h-full bg-cyan-400 rounded-full" style={{ width: `${Math.min(percent, 100)}%` }}></div>
-                                    </div>
-                                </div>
-                            </td>
+    <div className="flex items-center gap-2 w-full justify-center">
+        <span 
+            className="text-xs font-bold w-12 text-right transition-colors duration-300"
+            style={{ color: getDynamicColor(percent) }}
+        >
+            {percent.toFixed(1)}%
+        </span>
+        <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div 
+                className="h-full rounded-full transition-all duration-500" 
+                style={{ 
+                    width: `${Math.min(percent, 100)}%`,
+                    backgroundColor: getDynamicColor(percent) 
+                }}
+            ></div>
+        </div>
+    </div>
+</td>
                         </tr>
                     );
                 })}
@@ -265,14 +284,25 @@ const ZoneMiniTable = ({ title, data, count, jobId}) => {
             <td className="p-4 text-[13px] text-right font-mono border-r border-slate-700/50">${totals.meta.toLocaleString()}</td>
             <td className="p-4 text-[13px] text-right font-mono text-emerald-400 border-r border-slate-700/50">${totals.recaudo.toLocaleString()}</td>
             <td className="p-4 text-[13px] text-right font-mono text-red-400 border-r border-slate-700/50">${totals.faltante.toLocaleString()}</td>
-            <td className="p-4">
-                <div className="flex items-center gap-2 w-full justify-center">
-                    <span className="text-[13px] font-black w-12 text-right text-white">{totals.cumplimiento.toFixed(1)}%</span>
-                    <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${Math.min(totals.cumplimiento, 100)}%` }}></div>
-                    </div>
-                </div>
-            </td>
+           <td className="p-4">
+    <div className="flex items-center gap-2 w-full justify-center">
+        <span 
+            className="text-[13px] font-black w-12 text-right transition-colors duration-300"
+            style={{ color: getDynamicColor(totals.cumplimiento) }}
+        >
+            {totals.cumplimiento.toFixed(1)}%
+        </span>
+        <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div 
+                className="h-full rounded-full transition-all duration-500" 
+                style={{ 
+                    width: `${Math.min(totals.cumplimiento, 100)}%`,
+                    backgroundColor: getDynamicColor(totals.cumplimiento) 
+                }}
+            ></div>
+        </div>
+    </div>
+</td>
         </tr>
     </tfoot>
 </table>
@@ -285,6 +315,14 @@ const ZoneMiniTable = ({ title, data, count, jobId}) => {
 // ============= RANKING TABLE =============
 const RankingTable = ({ data = [], title, jobId }) => {
     const safeData = Array.isArray(data) ? data : [];
+
+    const getDynamicColor = (val) => {
+        if (val <= 20) return '#ef4444'; // Rojo
+        if (val <= 40) return '#f59e0b'; // Naranja
+        if (val <= 60) return '#eab308'; // Amarillo
+        if (val <= 80) return '#10b981'; // Verde
+        return '#8b5cf6';                // Morado
+    };
     
     const [currentPage, setCurrentPage] = React.useState(1);
     const rowsPerPage = 10;
@@ -300,14 +338,7 @@ const RankingTable = ({ data = [], title, jobId }) => {
     const indexOfFirstRow = indexOfLastRow - rowsPerPage;
     const currentRows = safeData.slice(indexOfFirstRow, indexOfLastRow);
 
-    const getDynamicColor = (val) => {
-        if (val <= 20) return '#ef4444'; // Rojo
-        if (val <= 40) return '#f59e0b'; // Naranja
-        if (val <= 60) return '#eab308'; // Amarillo
-        if (val <= 80) return '#10b981'; // Verde
-        return '#8b5cf6';                // Morado
-    };
-
+    
     // Función para truncar a 2 decimales exactos SIN aproximar
     const truncateTwoDecimals = (num) => {
         return (Math.trunc(num * 100) / 100).toFixed(2);
@@ -374,26 +405,24 @@ const RankingTable = ({ data = [], title, jobId }) => {
                                         <td className="p-3 text-[10px] font-bold text-emerald-400 text-right font-mono">${(Number(row.Recaudo_Total) || 0).toLocaleString()}</td>
                                         <td className="p-3 text-[10px] font-black text-red-400 text-right font-mono">${(Number(row.Faltante_Calc) > 0 ? Number(row.Faltante_Calc) : 0).toLocaleString()}</td>
                                         <td className="p-3 align-middle">
-                                            <div className="flex items-center gap-2 w-full">
-                                                {/* Se aplica el color dinámico al texto y la función de truncado */}
-                                                <span 
-                                                    className="text-[10px] font-black w-10 text-right transition-colors duration-300"
-                                                    style={{ color: getDynamicColor(cump) }}
-                                                >
-                                                    {truncateTwoDecimals(cump)}%
-                                                </span>
-                                                <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                                                    {/* Se aplica el color dinámico como background-color a la barra */}
-                                                    <div 
-                                                        className="h-full rounded-full transition-all duration-500" 
-                                                        style={{ 
-                                                            width: `${Math.min(cump, 100)}%`,
-                                                            backgroundColor: getDynamicColor(cump)
-                                                        }}
-                                                    ></div>
-                                                </div>
-                                            </div>
-                                        </td>
+    <div className="flex items-center gap-2 w-full justify-center">
+        <span 
+            className="text-xs font-bold w-12 text-right transition-colors duration-300"
+            style={{ color: getDynamicColor(cump) }}
+        >
+            {cump.toFixed(1)}%
+        </span>
+        <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+            <div 
+                className="h-full rounded-full transition-all duration-500" 
+                style={{ 
+                    width: `${Math.min(cump, 100)}%`,
+                    backgroundColor: getDynamicColor(cump) 
+                }}
+            ></div>
+        </div>
+    </div>
+</td>
                                     </tr>
                                 );
                             })
@@ -445,29 +474,67 @@ export default function Resultados({ data, selectedFilters, apiClient, jobId }) 
 
         if (!Array.isArray(rawResultadosZona) || rawResultadosZona.length === 0) return null;
 
+        // ── FILTRO DE NOVEDADES (idéntico a Cartera.jsx applyFilters) ───────────
+        // FilterSidebar emite 'Con Novedad' / 'Sin Novedad' bajo selectedFilters.Novedades.
+        // Se evalúa fila por fila igual que Cartera para evitar fallos con datos agregados.
+        const globalNovedades   = selectedFilters?.Novedades || [];
+        const wantsConNovedad   = globalNovedades.some(v => String(v).toLowerCase().includes('con') || parseInt(v) > 0);
+        const wantsSinNovedad   = globalNovedades.some(v => String(v).toLowerCase().includes('sin') || String(v) === '0' || parseInt(v) === 0);
+        const hayFiltroNovedades = globalNovedades.length > 0;
+
+        // Helper reutilizable — mismo criterio que Cartera.jsx
+        const matchesNovedadesFilter = (row) => {
+            if (!hayFiltroNovedades) return true;
+
+            const cantNovedades = row['Cantidad_Novedades'] !== undefined
+                ? row['Cantidad_Novedades']
+                : row['cantidad_novedades'];
+            const tipoNovedad = row['Tipo_Novedad'] !== undefined
+                ? row['Tipo_Novedad']
+                : row['tipo_novedad'];
+
+            // Fila sin campo de novedad (datos agregados) → pasa siempre, igual que Cartera
+            if (cantNovedades === undefined && tipoNovedad === undefined) return true;
+
+            let filaTieneNovedad = false;
+            if (cantNovedades !== undefined && cantNovedades !== null) {
+                filaTieneNovedad = parseInt(cantNovedades) > 0;
+            } else if (tipoNovedad !== undefined && tipoNovedad !== null) {
+                filaTieneNovedad = String(tipoNovedad).trim().toUpperCase() !== 'SIN NOVEDAD';
+            }
+
+            if (wantsConNovedad && filaTieneNovedad)  return true;
+            if (wantsSinNovedad && !filaTieneNovedad) return true;
+            return false;
+        };
+        // ────────────────────────────────────────────────────────────────────────
+
         const gaugeDataFiltered = rawResultadosZona.filter(item => {
-    const isCallCenter = item.Zona?.toUpperCase().includes('CALL CENTER');
-    if (isCallCenter) return false;
+            const isCallCenter = item.Zona?.toUpperCase().includes('CALL CENTER');
+            if (isCallCenter) return false;
 
-    const globalZonas       = selectedFilters?.Zona || [];
-    const globalRegionales  = selectedFilters?.Regional_Cobro || [];
-    const globalEmpresas    = selectedFilters?.Empresa || [];
-    const globalVigencias   = selectedFilters?.Estado_Vigencia || [];   // ← AGREGAR
-    const globalFranjas     = selectedFilters?.Franja_Cartera || [];    // ← AGREGAR
-    const globalCallCenters = selectedFilters?.CALL_CENTER_FILTRO || []; // ← AGREGAR
+            const globalZonas       = selectedFilters?.Zona || [];
+            const globalRegionales  = selectedFilters?.Regional_Cobro || [];
+            const globalEmpresas    = selectedFilters?.Empresa || [];
+            const globalVigencias   = selectedFilters?.Estado_Vigencia || [];
+            const globalFranjas     = selectedFilters?.Franja_Cartera || [];
+            const globalCallCenters = selectedFilters?.CALL_CENTER_FILTRO || [];
 
-    const matchesGlobalZona       = globalZonas.length === 0       || globalZonas.includes(item.Zona);
-    const matchesGlobalRegional   = globalRegionales.length === 0  || globalRegionales.includes(item.Regional_Cobro);
-    const matchesGlobalEmpresa    = globalEmpresas.length === 0    || globalEmpresas.includes(item.Empresa);
-    const matchesGlobalVigencia   = globalVigencias.length === 0   || globalVigencias.includes(item.Estado_Vigencia);   // ← AGREGAR
-    const matchesGlobalFranja     = globalFranjas.length === 0     || globalFranjas.includes(item.Franja_Meta);          // ← AGREGAR
-    const matchesGlobalCallCenter = globalCallCenters.length === 0 || globalCallCenters.includes(item.CALL_CENTER_FILTRO); // ← AGREGAR
-    const matchesLocal = !localZona || item.Zona === localZona;
+            const matchesGlobalZona       = globalZonas.length === 0       || globalZonas.includes(item.Zona);
+            const matchesGlobalRegional   = globalRegionales.length === 0  || globalRegionales.includes(item.Regional_Cobro);
+            const matchesGlobalEmpresa    = globalEmpresas.length === 0    || globalEmpresas.includes(item.Empresa);
+            const matchesGlobalVigencia   = globalVigencias.length === 0   || globalVigencias.includes(item.Estado_Vigencia);
+            const matchesGlobalFranja     = globalFranjas.length === 0     || globalFranjas.includes(item.Franja_Meta);
+            const matchesGlobalCallCenter = globalCallCenters.length === 0 || globalCallCenters.includes(item.CALL_CENTER_FILTRO);
+            const matchesLocal            = !localZona || item.Zona === localZona;
 
-    return matchesGlobalZona && matchesGlobalRegional && matchesGlobalEmpresa
-        && matchesGlobalVigencia && matchesGlobalFranja && matchesGlobalCallCenter
-        && matchesLocal;
-});
+            // Aplica el helper de novedades (igual que Cartera: pasa si no tiene el campo)
+            const matchesNovedades = matchesNovedadesFilter(item);
+
+            return matchesGlobalZona && matchesGlobalRegional && matchesGlobalEmpresa
+                && matchesGlobalVigencia && matchesGlobalFranja && matchesGlobalCallCenter
+                && matchesNovedades && matchesLocal;
+        });
 
         const franjasGauges = FRANJAS_CONFIG.map(config => {
             const registros = gaugeDataFiltered.filter(item => 
@@ -498,7 +565,7 @@ export default function Resultados({ data, selectedFilters, apiClient, jobId }) 
             recaudo: gRecaudoTotalSum,
             faltante: Math.max(0, gMetaTotalSum - gRecaudoTotalSum),
             cumplimientoCards: gMetaTotalSum > 0 ? (gRecaudoTotalSum / gMetaTotalSum) * 100 : 0,
-            cuentasTotal: gaugeDataFiltered.reduce((sum, item) => sum + (Number(item.Cuentas || item.Total_Cuentas || 1)), 0)
+            cuentasTotal: gaugeDataFiltered.reduce((sum, item) => sum + (Number(item.Cuentas || item.Total_Cuentas || 0)), 0)
         };
 
         const availableZonas = [...new Set(rawResultadosZona
@@ -507,21 +574,26 @@ export default function Resultados({ data, selectedFilters, apiClient, jobId }) 
         )].sort();
 
         const rankingData = rawResultadosCobrador
-    .filter(item => {
+    .filter(row => {
         const globalZonas       = selectedFilters?.Zona || [];
         const globalRegionales  = selectedFilters?.Regional_Cobro || [];
         const globalEmpresas    = selectedFilters?.Empresa || [];
-        const globalVigencias   = selectedFilters?.Estado_Vigencia || [];   // ← AGREGAR
-        const globalCallCenters = selectedFilters?.CALL_CENTER_FILTRO || []; // ← AGREGAR
+        const globalVigencias   = selectedFilters?.Estado_Vigencia || [];
+        const globalFranjas     = selectedFilters?.Franja_Cartera || [];
+        const globalCallCenters = selectedFilters?.CALL_CENTER_FILTRO || [];
 
-        const matchesZona       = globalZonas.length === 0       || globalZonas.includes(item.Zona);
-        const matchesRegional   = globalRegionales.length === 0  || globalRegionales.includes(item.Regional_Cobro);   // ← AGREGAR
-        const matchesEmpresa    = globalEmpresas.length === 0    || globalEmpresas.includes(item.Empresa);            // ← AGREGAR
-        const matchesVigencia   = globalVigencias.length === 0   || globalVigencias.includes(item.Estado_Vigencia);   // ← AGREGAR
-        const matchesCallCenter = globalCallCenters.length === 0 || globalCallCenters.includes(item.CALL_CENTER_FILTRO); // ← AGREGAR
-        const matchesLocal      = !localZona || item.Zona === localZona;
+        const matchesZona       = globalZonas.length === 0       || globalZonas.includes(row.Zona);
+        const matchesRegional   = globalRegionales.length === 0  || globalRegionales.includes(row.Regional_Cobro);
+        const matchesEmpresa    = globalEmpresas.length === 0    || globalEmpresas.includes(row.Empresa);
+        const matchesVigencia   = globalVigencias.length === 0   || globalVigencias.includes(row.Estado_Vigencia);
+        const matchesFranja     = globalFranjas.length === 0     || globalFranjas.includes(row.Franja_Meta);
+        const matchesCallCenter = globalCallCenters.length === 0 || globalCallCenters.includes(row.CALL_CENTER_FILTRO);
+        const matchesLocal      = !localZona || row.Zona === localZona;
 
-        return matchesZona && matchesRegional && matchesEmpresa && matchesVigencia && matchesCallCenter && matchesLocal;
+        // Lógica de Novedades para el Ranking (mismo helper que gauges, igual que Cartera)
+        const matchesGlobalNovedades = matchesNovedadesFilter(row);
+
+        return matchesZona && matchesRegional && matchesEmpresa && matchesVigencia && matchesFranja && matchesCallCenter && matchesLocal && matchesGlobalNovedades;
     })
             .map(row => {
                 const metaVal = Number(row.Meta_Total) || 0;
