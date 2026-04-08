@@ -716,23 +716,41 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
 
     // ── HELPERS ───────────────────────────────────────────────────────────────
 
-    const applyGlobalFilters = useCallback((dataSet) => {
-        if (!Array.isArray(dataSet)) return [];
+    const applyGlobalFilters = useCallback((sourceData) => {
+        let filteredSet = [...sourceData];
 
-        let filteredSet = dataSet;
-        if (localFiltersGestion.excluir_cargos) {
-            const excluirNorm = String(localFiltersGestion.excluir_cargos).trim().toUpperCase();
-            filteredSet = filteredSet.filter(
-                item => String(item.Cargo_Usuario ?? '').trim().toUpperCase() !== excluirNorm
-            );
+        if (localFiltersGestion.excluir_cargos && localFiltersGestion.excluir_cargos.length > 0) {
+            filteredSet = filteredSet.filter(item => !localFiltersGestion.excluir_cargos.includes(item.Cargo_Usuario));
         }
 
         const entries = Object.entries(selectedFilters || {});
         if (entries.length === 0) return filteredSet;
 
-        return filteredSet.filter(item =>
+        return filteredSet.filter(item => 
             entries.every(([key, values]) => {
                 if (!values || !Array.isArray(values) || values.length === 0) return true;
+
+                // --- INICIO: Interceptamos SOLO Novedades ---
+                if (key.toLowerCase() === 'novedades') {
+                    const cantNovedades = item['Cantidad_Novedades'];
+                    
+                    const quiereConNovedad = values.some(v => String(v).toUpperCase().includes('CON NOVEDAD'));
+                    const quiereSinNovedad = values.some(v => String(v).toUpperCase().includes('SIN NOVEDAD'));
+
+                    let filaTieneNovedad = false;
+                    if (cantNovedades !== undefined && cantNovedades !== null) {
+                        filaTieneNovedad = Number(cantNovedades) > 0;
+                    }
+
+                    if (quiereConNovedad && filaTieneNovedad) return true;
+                    if (quiereSinNovedad && !filaTieneNovedad) return true;
+                    if (quiereConNovedad && quiereSinNovedad) return true;
+
+                    return false;
+                }
+                // --- FIN: Interceptamos SOLO Novedades ---
+
+                // Los demás filtros se ejecutan de forma normal e intacta
                 return values.includes(item[key]);
             })
         );
@@ -796,14 +814,29 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
             });
 
             // 2️⃣ MAPEAR FILTROS GLOBALES (selectedFilters) - NUEVO
-            const mappedGlobalFilters = {};
-            Object.entries(selectedFilters || {}).forEach(([key, values]) => {
-                if (Array.isArray(values) && values.length > 0) {
-                    const backendKey = key.toLowerCase();
-                    mappedGlobalFilters[backendKey] = values;
-                }
-            });
+           const mappedGlobalFilters = {};
+                Object.entries(selectedFilters || {}).forEach(([key, values]) => {
+                    if (Array.isArray(values) && values.length > 0) {
+                        const backendKey = key.toLowerCase();
+                        
+                        // --- INICIO: Interceptamos SOLO Novedades para el payload ---
+                       if (backendKey === 'novedades') {
+                            const quiereConNovedad = values.some(v => String(v).toUpperCase().includes('CON NOVEDAD'));
+                            const quiereSinNovedad = values.some(v => String(v).toUpperCase().includes('SIN NOVEDAD'));
 
+                            // Solo enviamos el campo "cantidad_novedades", NUNCA "novedades"
+                            if (quiereSinNovedad && !quiereConNovedad) {
+                                mappedGlobalFilters['Cantidad_Novedades'] = [0]; 
+                            } else if (quiereConNovedad && !quiereSinNovedad) {
+                                mappedGlobalFilters['Cantidad_Novedades'] = [1]; 
+                            }
+                        } else {
+                            // Los demás filtros (origen, etc.) se agregan intactos
+                            mappedGlobalFilters[backendKey] = values;
+                        }
+                        // --- FIN: Interceptamos SOLO Novedades ---
+                    }
+                });
             // 3️⃣ COMBINAR ambos filtros en el payload
             const payload = {
                 job_id: jobId,
@@ -969,42 +1002,85 @@ export default function Seguimientos({ data, selectedFilters, apiClient, jobId }
     if (!charts) return null;
 
     const filtrosRodamientoExport = useMemo(() => {
-    const global = {};
+    // 1. Mapear filtros globales con la misma lógica que la tabla
+    const mappedGlobalFilters = {};
     Object.entries(selectedFilters || {}).forEach(([key, values]) => {
-        if (Array.isArray(values) && values.length > 0) global[key.toLowerCase()] = values;
+        if (Array.isArray(values) && values.length > 0) {
+            const backendKey = key.toLowerCase();
+            
+            // Lógica exacta de Novedades
+            if (backendKey === 'novedades') {
+                const quiereConNovedad = values.some(v => String(v).toUpperCase().includes('CON NOVEDAD'));
+                const quiereSinNovedad = values.some(v => String(v).toUpperCase().includes('SIN NOVEDAD'));
+                
+                if (quiereSinNovedad && !quiereConNovedad) {
+                    mappedGlobalFilters['cantidad_novedades'] = [0];
+                } else if (quiereConNovedad && !quiereSinNovedad) {
+                    mappedGlobalFilters['cantidad_novedades'] = [1];
+                }
+            } else {
+                mappedGlobalFilters[backendKey] = values;
+            }
+        }
+    });
+
+    // 2. Mapear filtros locales a ARREGLOS (Laravel espera arrays)
+    const formattedLocalFilters = {};
+    Object.entries(localFiltersRodamiento || {}).forEach(([key, value]) => {
+        if (value !== '' && value !== null && value !== undefined) {
+            formattedLocalFilters[key.toLowerCase()] = [value];
+        }
     });
 
     return {
         job_id: jobId,
-        origen: 'seguimientos_rodamientos', // Indica a Python que use el archivo de rodamientos
-        search_term: rodamientoTable.search || '',
-        page: rodamientoTable.pagination?.currentPage || 1,
-        page_size: rodamientoTable.pagination?.pageSize || 15,
-        columnas_visibles: visibleColsRodamiento, // Solo las columnas marcadas como visibles
-        ...localFiltersRodamiento,
-        ...global
+        origen: 'seguimientos_rodamientos',
+        search_term: rodamientoTable.search || '', // Envía lo que el usuario haya escrito en el buscador
+        columnas_visibles: visibleColsRodamiento,
+        // IMPORTANTE: NO enviar 'page' ni 'page_size' para que el backend traiga todos los datos filtrados.
+        ...formattedLocalFilters,
+        ...mappedGlobalFilters
     };
-}, [jobId, rodamientoTable, visibleColsRodamiento, localFiltersRodamiento, selectedFilters]);
-
+}, [jobId, rodamientoTable.search, visibleColsRodamiento, localFiltersRodamiento, selectedFilters]);
 
 // --- FILTROS PARA LA TABLA DE GESTIÓN ---
 const filtrosGestionExport = useMemo(() => {
-    const global = {};
+    const mappedGlobalFilters = {};
     Object.entries(selectedFilters || {}).forEach(([key, values]) => {
-        if (Array.isArray(values) && values.length > 0) global[key.toLowerCase()] = values;
+        if (Array.isArray(values) && values.length > 0) {
+            const backendKey = key.toLowerCase();
+            if (backendKey === 'novedades') {
+                const quiereConNovedad = values.some(v => String(v).toUpperCase().includes('CON NOVEDAD'));
+                const quiereSinNovedad = values.some(v => String(v).toUpperCase().includes('SIN NOVEDAD'));
+                if (quiereSinNovedad && !quiereConNovedad) {
+                    mappedGlobalFilters['cantidad_novedades'] = [0];
+                } else if (quiereConNovedad && !quiereSinNovedad) {
+                    mappedGlobalFilters['cantidad_novedades'] = [1];
+                }
+            } else {
+                mappedGlobalFilters[backendKey] = values;
+            }
+        }
+    });
+
+    const formattedLocalFilters = {};
+    Object.entries(localFiltersGestion || {}).forEach(([key, value]) => {
+        if (value !== '' && value !== null && value !== undefined && key !== 'excluir_cargos') {
+            // Manejar la excepción de 'cargo_usuario' a 'cargos' como lo hace tu tabla
+            const backendKey = key.toLowerCase() === 'cargo_usuario' ? 'cargos' : key.toLowerCase();
+            formattedLocalFilters[backendKey] = [value];
+        }
     });
 
     return {
         job_id: jobId,
-        origen: 'seguimientos_gestion', // Indica a Python que use el archivo de gestión
+        origen: 'seguimientos_gestion',
         search_term: gestionTable.search || '',
-        page: gestionTable.pagination?.currentPage || 1,
-        page_size: gestionTable.pagination?.pageSize || 15,
-        columnas_visibles: visibleColsGestion, // Asegúrate de que esta variable exista para la tabla gestión
-        ...localFiltersGestion,
-        ...global
+        columnas_visibles: visibleColsGestion, 
+        ...formattedLocalFilters,
+        ...mappedGlobalFilters
     };
-}, [jobId, gestionTable, visibleColsGestion, localFiltersGestion, selectedFilters]);
+}, [jobId, gestionTable.search, visibleColsGestion, localFiltersGestion, selectedFilters]);
     // ── RENDER ────────────────────────────────────────────────────────────────
 
     return (
@@ -1081,7 +1157,7 @@ const filtrosGestionExport = useMemo(() => {
         <ExportExcel 
             isAvailable={true} 
             filtros={filtrosGestionExport} // Usa los filtros de Gestión
-            fileName={`Gestion_${jobId}.xlsx`} 
+            fileName={`gestion_${jobId}.xlsx`} 
             tableTitle="Gestión"
         />
     }

@@ -12,6 +12,19 @@ const apiClient = axios.create({
     },
 });
 
+apiClient.interceptors.request.use((config) => {
+    // Busca el token directamente en el almacenamiento del navegador
+    const token = localStorage.getItem('token');
+    
+    // Si existe, lo inyecta en las cabeceras de la petición
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+}, (error) => {
+    return Promise.reject(error);
+});
+
 export const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
@@ -23,11 +36,20 @@ export const AuthProvider = ({ children }) => {
     });
 
     const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('token'));
-    const [loading, setLoading] = useState(true);
+
+    // CAMBIO 1: Si ya hay usuario en localStorage, loading arranca en false
+    // Esto evita el parpadeo/spinner en cada recarga cuando la sesión ya existe
+    const [loading, setLoading] = useState(() => !localStorage.getItem('user'));
 
     const cleanSession = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        //  CAMBIO 2: Limpiar también el caché del dashboard al cerrar sesión
+        sessionStorage.removeItem('dashboard_activeTab');
+        sessionStorage.removeItem('dashboard_jobId');
+        sessionStorage.removeItem('dashboard_lastUpdate');
+        sessionStorage.removeItem('dashboard_moduleData');
+        sessionStorage.removeItem('dashboard_visitedTabs');
         setUser(null);
         setIsAuthenticated(false);
     };
@@ -43,8 +65,6 @@ export const AuthProvider = ({ children }) => {
             response => response,
             error => {
                 if (error.response && error.response.status === 401) {
-                    // Solo limpiar sesión si NO estamos en la ruta de login
-                    // (para evitar limpiar cuando el usuario apenas intenta loguearse y falla la clave)
                     if (!error.config.url.includes('/users/login')) {
                         cleanSession();
                     }
@@ -59,6 +79,9 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
+    // ✅ CAMBIO 3: Verificación silenciosa en background
+    // Si ya hay datos en localStorage → renderiza inmediatamente (loading=false)
+    // y verifica el token contra el servidor SIN bloquear la UI
     const loadUserFromToken = async () => {
         const token = localStorage.getItem('token');
         if (!token) {
@@ -66,6 +89,14 @@ export const AuthProvider = ({ children }) => {
             return;
         }
 
+        // Si ya tenemos usuario guardado, liberamos el loading de inmediato
+        // La app se muestra al instante sin esperar la red
+        const hasCachedUser = !!localStorage.getItem('user');
+        if (hasCachedUser) {
+            setLoading(false); // ← UI se muestra YA
+        }
+
+        // Verificación en background (silenciosa)
         try {
             const response = await apiClient.get('/me');
             const userData = response.data.data || response.data;
@@ -76,7 +107,8 @@ export const AuthProvider = ({ children }) => {
             console.error("Error validando sesión:", error);
             cleanSession();
         } finally {
-            setLoading(false);
+            // Solo hace falta si no había usuario cacheado
+            if (!hasCachedUser) setLoading(false);
         }
     };
 
@@ -84,7 +116,6 @@ export const AuthProvider = ({ children }) => {
         loadUserFromToken();
     }, []);
 
-    // --- FUNCIÓN LOGIN MODIFICADA ---
     const login = async (email, password) => {
         try {
             const response = await apiClient.post('/users/login', { email, password });
@@ -104,35 +135,28 @@ export const AuthProvider = ({ children }) => {
         } catch (error) {
             console.error("Error en login:", error);
 
-            // Estructuramos el error para que LoginPage no se rompa (pantalla blanca)
             let errorData = {
                 type: 'general',
                 userMessage: 'Ocurrió un error inesperado.'
             };
 
             if (error.response) {
-                // Errores que vienen del backend
                 const status = error.response.status;
                 const msg = error.response.data.error || 'Error en credenciales';
 
                 if (status === 404) {
-                    // Backend dice que no encontró el email
                     errorData = { type: 'email', userMessage: msg };
                 } else if (status === 401) {
-                    // Backend dice que la contraseña está mal
                     errorData = { type: 'password', userMessage: msg };
                 } else if (status === 422) {
-                     // Error de validación (formato de email invalido, campos vacios)
                      errorData = { type: 'email', userMessage: 'Revisa el formato de los datos.' };
                 } else if (status === 500) {
                     errorData = { type: 'general', userMessage: 'Error del servidor. Intenta más tarde.' };
                 }
             } else if (error.request) {
-                // No hubo respuesta (servidor apagado o sin internet)
                 errorData = { type: 'connection', userMessage: 'No se pudo conectar con el servidor.' };
             }
 
-            // Lanzamos el objeto estructurado
             throw errorData; 
         }
     };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList 
 } from 'recharts';
@@ -31,8 +31,6 @@ const FILTER_KEY_MAP = {
 
 // ==========================================
 // MAPEO DE VALORES DE VIGENCIA
-// El parquet usa "VIGENTES" (con S), "VIGENCIA EXPIRADA", "DIAS 1-10", etc.
-// El selector global puede enviar variaciones → normalizamos aquí
 // ==========================================
 const VIGENCIA_VALUE_MAP = {
     'VIGENTE':           'VIGENTES',
@@ -45,12 +43,31 @@ const VIGENCIA_VALUE_MAP = {
 };
 
 // ==========================================
+const resolveNovedadesPayload = (novedadesArray) => {
+    if (!novedadesArray || novedadesArray.length === 0) return {};
+
+    const wantsConNovedad = novedadesArray.some(
+        v => String(v).toLowerCase().includes('con') || parseInt(v) > 0
+    );
+    const wantsSinNovedad = novedadesArray.some(
+        v => String(v).toLowerCase().includes('sin') || String(v) === '0' || parseInt(v) === 0
+    );
+
+    // Ambos seleccionados → sin restricción (equivale a no filtrar)
+    if (wantsConNovedad && wantsSinNovedad) return {};
+
+    if (wantsConNovedad)  return { con_novedad: true  };
+    if (wantsSinNovedad)  return { con_novedad: false };
+    return {};
+};
+
+// ==========================================
 // 2. COMPONENTE DE TABLA REMOTA
 // ==========================================
 const TablaComercialRemota = ({ 
     apiClient, jobId, origen, titulo, icono: Icono, canLoad, onLoadComplete, 
     colorBadge, initialColumns = [], filterConfig = [],
-    // ── NUEVO: filtros globales del sidebar ──────────────────────────────────
+    // ── Filtros globales del sidebar ──────────────────────────────────────────
     globalFilters = {}
 }) => {
     const [tableData, setTableData] = useState([]); 
@@ -66,10 +83,11 @@ const TablaComercialRemota = ({
     const [activeFilters, setActiveFilters] = useState({});
     const [tempFilters, setTempFilters] = useState({});
 
-    // ── OPCIONES DINÁMICAS: se extraen de los datos cargados de ESTA tabla ──────
+    // ── Opciones dinámicas: se extraen de los datos cargados de ESTA tabla ──────
     const [dynamicOptions, setDynamicOptions] = useState({});
 
-    // ── FIX #1: buildGlobalFilterPayload con normalización de valores de vigencia ──
+    // ── buildGlobalFilterPayload: normaliza los filtros globales para el backend ──
+    //    MODIFICADO: incluye traducción especial para Novedades via resolveNovedadesPayload
     const buildGlobalFilterPayload = useCallback((gf) => {
         const KEY_MAP = {
             Empresa:            'empresa',
@@ -77,20 +95,27 @@ const TablaComercialRemota = ({
             Regional_Cobro:     'regional_cobro',
             Franja_Cartera:     'franja',
             CALL_CENTER_FILTRO: 'call_center_filtro',
-            Novedades:          'novedades',
-            Estado_Vigencia:    'vigencia',
-            Estado_Vigencia:    'estado_vigencia', // Python lee payload.vigencia
+            Estado_Vigencia:    'estado_vigencia',
         };
 
         const UPPERCASE_KEYS = new Set(['Empresa', 'Zona', 'Regional_Cobro', 'CALL_CENTER_FILTRO']);
 
         const result = {};
         Object.entries(gf || {}).forEach(([key, value]) => {
+            // ── NOVEDADES: traducción especial ───────────────────────────────────
+            // selectedFilters.Novedades → { con_novedad: true/false }
+            // Misma lógica que Resultados.jsx: "Con Novedad" = Cantidad_Novedades > 0
+            //                                  "Sin Novedad" = Cantidad_Novedades === 0
+            if (key === 'Novedades') {
+                const novedadesPayload = resolveNovedadesPayload(Array.isArray(value) ? value : [value]);
+                Object.assign(result, novedadesPayload);
+                return; // no procesar más este key
+            }
+
             if (Array.isArray(value) && value.length > 0) {
                 const backendKey = KEY_MAP[key] ?? key.toLowerCase();
 
                 if (key === 'Estado_Vigencia') {
-                    // ✅ Normalizar al valor exacto que tiene el parquet (VIGENTE → VIGENTES, etc.)
                     result[backendKey] = value.map(v => {
                         const upper = String(v).toUpperCase().trim();
                         return VIGENCIA_VALUE_MAP[upper] || upper;
@@ -131,7 +156,7 @@ const TablaComercialRemota = ({
                 }
             });
 
-            // ── Filtros globales del sidebar ────────────────────────────────
+            // ── Filtros globales del sidebar (incluye Novedades traducido) ──────
             const globalPayload = buildGlobalFilterPayload(globalFilters);
 
             const payload = {
@@ -158,7 +183,6 @@ const TablaComercialRemota = ({
                 } else {
                     setVisibleColumns(detectedCols);
                 }
-                // Extraemos opciones dinámicas de los primeros datos recibidos
                 extractDynamicOptions(responseData);
             }
 
@@ -183,19 +207,14 @@ const TablaComercialRemota = ({
         if (jobId && canLoad && !dataLoaded && !loading) fetchData(1, {});
     }, [jobId, canLoad, dataLoaded, loading, fetchData]);
 
-    // ── Cuando cambian los filtros globales, resetear y recargar ─────────────
+    // ── Cuando cambian los filtros globales, solo recargar datos sin limpiar la vista ──
     const globalFiltersKey = useMemo(() => JSON.stringify(globalFilters), [globalFilters]);
     useEffect(() => {
-        // Solo resetear si la tabla ya había cargado datos antes
         if (dataLoaded) {
-            setDataLoaded(false);
-            setTableData([]);
-            setColumns([]);
-            setVisibleColumns([]);
             setActiveFilters({});
             setTempFilters({});
-            setDynamicOptions({});
             setPagination({ current: 1, total_pages: 0, total_records: 0, page_size: 15 });
+            fetchData(1, {});
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [globalFiltersKey]);
@@ -231,29 +250,28 @@ const TablaComercialRemota = ({
     const handleOcultarTodas = () => setVisibleColumns([]);
     const filteredColumns = columns.filter(col => col.toLowerCase().includes(columnSearch.toLowerCase()));
 
-   const filtrosExport = useMemo(() => {
-    const formattedFilters = {};
-    Object.entries(activeFilters).forEach(([key, value]) => {
-        if (value) {
-            const backendKey = FILTER_KEY_MAP[key] ?? key;
-            formattedFilters[backendKey] = Array.isArray(value) ? value : [value.trim()];
-        }
-    });
+    const filtrosExport = useMemo(() => {
+        const formattedFilters = {};
+        Object.entries(activeFilters).forEach(([key, value]) => {
+            if (value) {
+                const backendKey = FILTER_KEY_MAP[key] ?? key;
+                formattedFilters[backendKey] = Array.isArray(value) ? value : [value.trim()];
+            }
+        });
 
-    // ── Incluir filtros globales también en la exportación ──────────────────
-    const globalPayload = buildGlobalFilterPayload(globalFilters);
+        const globalPayload = buildGlobalFilterPayload(globalFilters);
 
-    return { 
-        job_id: jobId, 
-        origen, 
-        search_term: "", 
-        page: 1,
-        page_size: 100000,
-        ...globalPayload,
-        ...formattedFilters,
-        columnas_visibles: visibleColumns.length > 0 ? visibleColumns : columns
-    };
-}, [jobId, origen, activeFilters, visibleColumns, columns, globalFilters, buildGlobalFilterPayload]);
+        return { 
+            job_id: jobId, 
+            origen, 
+            search_term: "", 
+            page: 1,
+            page_size: 100000,
+            ...globalPayload,
+            ...formattedFilters,
+            columnas_visibles: visibleColumns.length > 0 ? visibleColumns : columns
+        };
+    }, [jobId, origen, activeFilters, visibleColumns, columns, globalFilters, buildGlobalFilterPayload]);
 
     return (
         <div className="bg-slate-900/80 backdrop-blur-sm rounded-[2rem] border border-slate-700/60 shadow-2xl overflow-hidden flex flex-col mb-8 animate-in fade-in slide-in-from-bottom-4 transition-all duration-500 hover:border-slate-600/80">
@@ -327,8 +345,7 @@ const TablaComercialRemota = ({
                     )}
                 </div>
 
-                {/* ── BARRA DE FILTROS ─────────────────────────────────────────────────────
-                ─────────────────────────────────────────────────────────────────────────── */}
+                {/* ── BARRA DE FILTROS ─────────────────────────────────────────────────────── */}
                 {filterConfig.length > 0 && dataLoaded && (
                     <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-700/40 animate-in slide-in-from-top-1">
                         <div className="flex items-center gap-2 text-slate-400 mr-2">
@@ -336,7 +353,6 @@ const TablaComercialRemota = ({
                             <span className="text-[10px] font-bold uppercase">Filtrar:</span>
                         </div>
                         {filterConfig.map((config) => {
-                            // Usamos las opciones dinámicas (del propio parquet) con fallback a las externas
                             const opciones = (dynamicOptions[config.key] && dynamicOptions[config.key].length > 0)
                                 ? dynamicOptions[config.key]
                                 : (config.options || []);
@@ -503,11 +519,14 @@ const findKeyInObject = (obj, targetKey) => {
     return null;
 };
 
-const Comercial = ({ apiClient, jobId, selectedFilters }) => {
+const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
     const [data, setData] = useState([]);
     const [loadingCharts, setLoadingCharts] = useState(false);
     const [error, setError] = useState(null);
     const [loadStep, setLoadStep] = useState(0);
+
+    // ── Ref para detectar si el jobId cambió (carga nueva) o solo los filtros ──
+    const prevJobIdRef = useRef(null);
 
     // ── FILTROS LOCALES para gráfico + tabla resumen ──
     const [chartFilters, setChartFilters] = useState({
@@ -516,7 +535,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         Regional_Venta: '',
     });
 
-    // ── FIX #2: Separar vigencia del resto de filtros ──────────────────────────
+    // ── Separar vigencia del resto de filtros ─────────────────────────────────
     // filtersWithoutVigencia → afecta el gráfico/chart y la tabla FNZ
     // selectedFilters completo → afecta retanqueos y cosechas
     const filtersWithoutVigencia = useMemo(() => {
@@ -524,19 +543,54 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         return rest;
     }, [selectedFilters]);
 
-    // ── FIX #3: El gráfico SOLO se recarga cuando cambian filtros que NO son vigencia ──
-    // Antes: dependía de selectedFilters (cualquier filtro recargaba el gráfico)
-    // Ahora: depende de filtersWithoutVigencia (vigencia NO recarga el gráfico)
+    // ── buildChartGetParams: traduce los filtros globales para el GET del gráfico ──
+    // MODIFICADO: incluye traducción de Novedades igual que buildGlobalFilterPayload,
+    // usando resolveNovedadesPayload para convertir 'Con Novedad'/'Sin Novedad'
+    // en { con_novedad: true/false } que el backend puede interpretar.
+    const buildChartGetParams = useCallback((filters) => {
+        const params = {};
+
+        Object.entries(filters || {}).forEach(([key, value]) => {
+            // ── NOVEDADES: misma lógica que Resultados.jsx ───────────────────────
+            //   'Con Novedad' → Cantidad_Novedades > 0 → con_novedad: true
+            //   'Sin Novedad' → Cantidad_Novedades === 0 → con_novedad: false
+            if (key === 'Novedades') {
+                const novedadesPayload = resolveNovedadesPayload(Array.isArray(value) ? value : [value]);
+                Object.assign(params, novedadesPayload);
+                return;
+            }
+
+            if (Array.isArray(value) && value.length > 0) {
+                // Para GET, axios serializa arrays. Enviamos tal cual para los demás filtros.
+                params[key] = value;
+            }
+        });
+
+        return params;
+    }, []);
+
+    // ── El gráfico se recarga cuando cambian filtros que NO son vigencia ──
+    // Solo se reinicia completamente cuando cambia el jobId.
     useEffect(() => {
         if (!jobId) return;
+
+        const isNewJob = prevJobIdRef.current !== jobId;
+        prevJobIdRef.current = jobId;
+
         setLoadingCharts(true);
         setError(null);
-        setData([]);
-        setLoadStep(0);
-        setChartFilters({ Estado: '', Analista_Asociado: '', Regional_Venta: '' });
+
+        if (isNewJob) {
+            setData([]);
+            setLoadStep(0);
+            setChartFilters({ Estado: '', Analista_Asociado: '', Regional_Venta: '' });
+        }
+
+        // Construir los params GET con Novedades correctamente traducido
+        const chartParams = buildChartGetParams(filtersWithoutVigencia);
 
         apiClient.get(`/wallet/init/comercial`, { 
-            params: { job_id: jobId, ...filtersWithoutVigencia } 
+            params: { job_id: jobId, ...chartParams } 
         })
         .then(response => {
             const foundData = findKeyInObject(response.data, 'fnz_resumen');
@@ -548,9 +602,14 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         })
         .finally(() => {
             setLoadingCharts(false);
-            setLoadStep(1); 
+            if (isNewJob) {
+                setLoadStep(1);
+            } else {
+                setLoadStep(prev => (prev > 0 ? prev : 1));
+            }
         });
-    }, [jobId, apiClient, filtersWithoutVigencia]); // ← filtersWithoutVigencia, NO selectedFilters
+    // filtersWithoutVigencia incluye Novedades (sin Estado_Vigencia), buildChartGetParams lo traduce
+    }, [jobId, apiClient, filtersWithoutVigencia, buildChartGetParams]);
 
     const handleStepComplete = useCallback((currentStep) => {
         setLoadStep(prev => prev === currentStep ? prev + 1 : prev);
@@ -573,7 +632,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         rawData.forEach(item => {
             const vendedor  = String(item.Nombre_Vendedor    || item.nombre_vendedor    || 'SIN VENDEDOR').trim();
             const estado    = String(item.Estado             || item.estado             || 'SIN ESTADO').toUpperCase().trim();
-            const regional  = String(item.Regional_Venta    || item.regional_venta    || '').trim();
+           const regional = String(item.Regional_Venta || item.regional_venta || item.Regional || item.regional || item.Regional_Cobro || item.regional_cobro || '').trim();
             const activo    = String(item.Vendedor_Activo   || item.vendedor_activo   || '').trim();
             const analista  = String(item.Analista_Asociado || item.analista_asociado || '').trim();
 
@@ -595,6 +654,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         const uniqueAnalistas = Array.from(analistasSet).sort();
 
         const processedData = Object.values(grouped).sort((a, b) => b.total - a.total);
+
         const totals = { total: 0 };
         uniqueStates.forEach(s => totals[s] = 0);
         processedData.forEach(row => {
@@ -615,7 +675,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         return data.filter(item => {
             const estado   = String(item.Estado            || item.estado            || '').toUpperCase().trim();
             const analista = String(item.Analista_Asociado || item.analista_asociado || '').trim();
-            const regional = String(item.Regional_Venta   || item.regional_venta   || '').trim();
+           const regional = String(item.Regional_Venta || item.regional_venta || item.Regional || item.regional || item.Regional_Cobro || item.regional_cobro || '').trim();
 
             if (chartFilters.Estado           && estado   !== chartFilters.Estado.toUpperCase().trim()) return false;
             if (chartFilters.Analista_Asociado && analista !== chartFilters.Analista_Asociado.trim())    return false;
@@ -630,7 +690,6 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
     const chartData = useMemo(() => processedData.slice(0, 15), [processedData]);
 
     // ── CONFIGURACIÓN DE FILTROS PARA LA TABLA RETANQUEOS ────────────────────────
-    // ─────────────────────────────────────────────────────────────────────────────
     const filtrosRetanqueo = useMemo(() => [
         { key: 'Vendedor_Activo', label: 'Activo',   type: 'select', options: [] },
         { key: 'Nombre_Vendedor', label: 'Vendedor', type: 'select', options: [] },
@@ -639,15 +698,6 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
 
     const activeChartFilterCount = Object.values(chartFilters).filter(Boolean).length;
     const clearChartFilters = () => setChartFilters({ Estado: '', Analista_Asociado: '', Regional_Venta: '' });
-
-    if (loadingCharts) {
-        return (
-            <div className="h-96 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-[2rem] border border-slate-700/60 shadow-2xl animate-pulse">
-                <RefreshCw className="animate-spin mb-4 text-cyan-400" size={40} />
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Analizando Datos...</span>
-            </div>
-        );
-    }
 
     if (error) {
         return (
@@ -662,167 +712,180 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
         <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-700 fade-in">
 
             {/* ══════════════════════════════════════════
-                BARRA DE FILTROS — afecta gráfico + tabla
+                ZONA DE GRÁFICOS — overlay de carga inline
             ══════════════════════════════════════════ */}
-            {data.length > 0 && (
-                <div className="bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-slate-700/60 shadow-xl px-5 py-3.5 flex flex-wrap items-center gap-3">
-
-                    {/* Ícono + label */}
-                    <div className="flex items-center gap-2 shrink-0">
-                        <div className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/60">
-                            <Filter size={13} className="text-cyan-400" />
+            <div className="relative space-y-6">
+                {loadingCharts && (
+                    <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-[2rem] min-h-[200px]">
+                        <div className="flex flex-col items-center gap-3">
+                            <Loader2 className="animate-spin text-cyan-400" size={32} />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Actualizando gráficos...</span>
                         </div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filtros</span>
+                    </div>
+                )}
+
+                {/* BARRA DE FILTROS — afecta gráfico + tabla */}
+                {data.length > 0 && (
+                    <div className="bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-slate-700/60 shadow-xl px-5 py-3.5 flex flex-wrap items-center gap-3">
+
+                        {/* Ícono + label */}
+                        <div className="flex items-center gap-2 shrink-0">
+                            <div className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/60">
+                                <Filter size={13} className="text-cyan-400" />
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filtros</span>
+                            {activeChartFilterCount > 0 && (
+                                <span className="flex items-center justify-center w-4 h-4 rounded-full bg-cyan-500 text-[9px] font-black text-slate-900">
+                                    {activeChartFilterCount}
+                                </span>
+                            )}
+                        </div>
+
+                        <div className="w-px h-6 bg-slate-700/60 shrink-0" />
+
+                        {/* Estado */}
+                        <ChartFilterSelect
+                            label="Estado"
+                            value={chartFilters.Estado}
+                            options={allStates}
+                            onChange={(v) => setChartFilters(prev => ({ ...prev, Estado: v }))}
+                            active={!!chartFilters.Estado}
+                        />
+
+                        {/* Analista_Asociado */}
+                        <ChartFilterSelect
+                            label="Analista"
+                            value={chartFilters.Analista_Asociado}
+                            options={uniqueAnalistas}
+                            onChange={(v) => setChartFilters(prev => ({ ...prev, Analista_Asociado: v }))}
+                            active={!!chartFilters.Analista_Asociado}
+                        />
+
+                        {/* Regional_Venta */}
+                        <ChartFilterSelect
+                            label="Regional"
+                            value={chartFilters.Regional_Venta}
+                            options={uniqueRegionals}
+                            onChange={(v) => setChartFilters(prev => ({ ...prev, Regional_Venta: v }))}
+                            active={!!chartFilters.Regional_Venta}
+                        />
+
+                        {/* Limpiar */}
                         {activeChartFilterCount > 0 && (
-                            <span className="flex items-center justify-center w-4 h-4 rounded-full bg-cyan-500 text-[9px] font-black text-slate-900">
-                                {activeChartFilterCount}
-                            </span>
+                            <button
+                                onClick={clearChartFilters}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-red-900/30 hover:bg-red-800/40 text-red-400 rounded-xl text-[10px] font-bold transition-all border border-red-700/40 hover:border-red-600/60 active:scale-95"
+                            >
+                                <XCircle size={12} /> Limpiar
+                            </button>
                         )}
-                    </div>
 
-                    <div className="w-px h-6 bg-slate-700/60 shrink-0" />
-
-                    {/* Estado */}
-                    <ChartFilterSelect
-                        label="Estado"
-                        value={chartFilters.Estado}
-                        options={allStates}
-                        onChange={(v) => setChartFilters(prev => ({ ...prev, Estado: v }))}
-                        active={!!chartFilters.Estado}
-                    />
-
-                    {/* Analista_Asociado */}
-                    <ChartFilterSelect
-                        label="Analista"
-                        value={chartFilters.Analista_Asociado}
-                        options={uniqueAnalistas}
-                        onChange={(v) => setChartFilters(prev => ({ ...prev, Analista_Asociado: v }))}
-                        active={!!chartFilters.Analista_Asociado}
-                    />
-
-                    {/* Regional_Venta */}
-                    <ChartFilterSelect
-                        label="Regional"
-                        value={chartFilters.Regional_Venta}
-                        options={uniqueRegionals}
-                        onChange={(v) => setChartFilters(prev => ({ ...prev, Regional_Venta: v }))}
-                        active={!!chartFilters.Regional_Venta}
-                    />
-
-                    {/* Limpiar */}
-                    {activeChartFilterCount > 0 && (
-                        <button
-                            onClick={clearChartFilters}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-red-900/30 hover:bg-red-800/40 text-red-400 rounded-xl text-[10px] font-bold transition-all border border-red-700/40 hover:border-red-600/60 active:scale-95"
-                        >
-                            <XCircle size={12} /> Limpiar
-                        </button>
-                    )}
-
-                    {/* Contador */}
-                    <div className="ml-auto shrink-0">
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                            Mostrando{' '}
-                            <span className="text-cyan-400 font-black">{filteredData.length}</span>
-                            {' '}/ {data.length} registros
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            {/* GRÁFICOS Y RESUMEN */}
-            {processedData.length > 0 ? (
-                <>
-                    <div className="bg-slate-900/80 backdrop-blur-sm p-6 md:p-8 rounded-[2.5rem] border border-slate-700/60 shadow-2xl hover:border-slate-600/80 transition-all">
-                        <div className="flex justify-between items-center mb-8">
-                            <h3 className="text-[11px] font-black text-cyan-300 uppercase tracking-widest flex items-center gap-2">
-                                <Trophy size={16} className="text-amber-400"/> Top 15 Vendedores
-                            </h3>
-                            <div className="hidden md:flex gap-2">
-                                {uniqueStates.slice(0, 4).map((state, idx) => (
-                                    <div key={state} className="flex items-center gap-1 bg-slate-800/60 px-2 py-1 rounded-full border border-slate-700/60">
-                                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLOR_MAP[state] || DEFAULT_COLORS[idx] }}></span>
-                                        <span className="text-[9px] font-bold text-slate-300">{state}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="h-[420px] w-full mt-4">
-                            <ResponsiveContainer width="100%" height="100%">
-                               <BarChart data={chartData} margin={{ top: 30, right: 10, left: 0, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.3} />
-                                    <XAxis 
-                                        dataKey="name" angle={-90} textAnchor="end" interval={0}
-                                        tick={{ fontSize: 9, fontWeight: 650, fill: '#cbd5e1' }}
-                                        tickMargin={85} height={170}
-                                    />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                                    <Tooltip 
-                                        cursor={{ fill: '#1e293b' }} 
-                                        contentStyle={{ borderRadius: '12px', border: '1px solid #475569', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)', backgroundColor: '#0f172a', color: '#e2e8f0' }} 
-                                    />
-                                    <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: 'bold', color: '#cbd5e1' }} />
-                                    {uniqueStates.map((state, index) => {
-                                        const isLast = index === uniqueStates.length - 1;
-                                        return (
-                                            <Bar key={state} dataKey={state} stackId="a"
-                                                fill={COLOR_MAP[state] || DEFAULT_COLORS[index % DEFAULT_COLORS.length]}
-                                                radius={isLast ? [4, 4, 0, 0] : [0, 0, 0, 0]}
-                                                name={state}
-                                            >
-                                                <LabelList dataKey={state} position="center" fill="#ffffff" fontSize={10} fontWeight="bold" formatter={(val) => (val > 0 ? val : '')} />
-                                                {isLast && <LabelList dataKey="total" position="top" fill="#ffffff" fontSize={12} fontWeight="900" offset={10} />}
-                                            </Bar>
-                                        );
-                                    })}
-                                </BarChart>
-                            </ResponsiveContainer>
+                        {/* Contador */}
+                        <div className="ml-auto shrink-0">
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                                Mostrando{' '}
+                                <span className="text-cyan-400 font-black">{filteredData.length}</span>
+                                {' '}/ {data.length} registros
+                            </span>
                         </div>
                     </div>
+                )}
 
-                    <div className="bg-slate-900/80 backdrop-blur-sm rounded-[2.5rem] border border-slate-700/60 shadow-2xl overflow-hidden flex flex-col hover:border-slate-600/80 transition-all">
-                        <div className="p-6 border-b border-slate-700/40 flex items-center justify-between bg-gradient-to-r from-slate-900/50 to-slate-800/50">
-                            <div className="flex items-center gap-2">
-                                <Users size={18} className="text-cyan-400"/>
-                                <h3 className="text-[11px] font-black text-cyan-300 uppercase tracking-widest">Resumen por vendedor y estado</h3>
-                            </div>
-                        </div>
-                        <div className="overflow-auto custom-scrollbar max-h-[500px]">
-                            <table className="w-full text-[10px] bg-slate-900/60">
-                                <thead className="sticky top-0 z-10">
-                                    <tr className="bg-slate-800/80 text-slate-300 uppercase shadow-sm border-b border-slate-700/40">
-                                        <th className="p-4 text-left font-black sticky left-0 bg-slate-800/80 border-b border-slate-700/40 min-w-[150px] text-cyan-300">Vendedor</th>
-                                        {uniqueStates.map(state => <th key={state} className="p-4 text-center border-b border-slate-700/40 min-w-[80px] bg-slate-800/80 text-cyan-300">{state}</th>)}
-                                        <th className="p-4 text-right border-b border-slate-700/40 bg-slate-800/80 text-cyan-300">TOTAL</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-700/30 bg-slate-900/40">
-                                    {processedData.map((row, idx) => (
-                                        <tr key={idx} className="hover:bg-slate-800/40 transition-colors duration-200">
-                                            <td className="p-4 font-bold text-slate-200 sticky left-0 bg-slate-900/40 border-r border-slate-700/20">{row.name}</td>
-                                            {uniqueStates.map(state => <td key={state} className="p-3 text-center text-slate-400">{row[state] || '-'}</td>)}
-                                            <td className="p-4 text-right font-black text-cyan-400">{row.total}</td>
-                                        </tr>
+                {/* GRÁFICOS Y RESUMEN */}
+                {processedData.length > 0 ? (
+                    <>
+                        <div className="bg-slate-900/80 backdrop-blur-sm p-6 md:p-8 rounded-[2.5rem] border border-slate-700/60 shadow-2xl hover:border-slate-600/80 transition-all">
+                            <div className="flex justify-between items-center mb-8">
+                                <h3 className="text-[11px] font-black text-cyan-300 uppercase tracking-widest flex items-center gap-2">
+                                    <Trophy size={16} className="text-amber-400"/> Top 15 Vendedores
+                                </h3>
+                                <div className="hidden md:flex gap-2">
+                                    {uniqueStates.slice(0, 4).map((state, idx) => (
+                                        <div key={state} className="flex items-center gap-1 bg-slate-800/60 px-2 py-1 rounded-full border border-slate-700/60">
+                                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLOR_MAP[state] || DEFAULT_COLORS[idx] }}></span>
+                                            <span className="text-[9px] font-bold text-slate-300">{state}</span>
+                                        </div>
                                     ))}
-                                </tbody>
-                                <tfoot className="sticky bottom-0 z-10 font-black text-[10px] uppercase bg-cyan-900/30 text-cyan-300 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)] border-t-2 border-cyan-700/40">
-                                    <tr>
-                                        <td className="p-4 sticky left-0 bg-cyan-900/30 border-r border-cyan-700/40">TOTALES GLOBALES</td>
-                                        {uniqueStates.map(state => (
-                                            <td key={state} className="p-3 text-center">{totals[state] || 0}</td>
-                                        ))}
-                                        <td className="p-4 text-right text-cyan-200 text-xs">{totals.total}</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
+                                </div>
+                            </div>
+                            <div className="h-[420px] w-full mt-4">
+                                <ResponsiveContainer width="100%" height="100%">
+                                   <BarChart data={chartData} margin={{ top: 30, right: 10, left: 0, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.3} />
+                                        <XAxis 
+                                            dataKey="name" angle={-90} textAnchor="end" interval={0}
+                                            tick={{ fontSize: 9, fontWeight: 650, fill: '#cbd5e1' }}
+                                            tickMargin={85} height={170}
+                                        />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                                        <Tooltip 
+                                            cursor={{ fill: '#1e293b' }} 
+                                            contentStyle={{ borderRadius: '12px', border: '1px solid #475569', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)', backgroundColor: '#0f172a', color: '#e2e8f0' }} 
+                                        />
+                                        <Legend verticalAlign="top" iconType="circle" wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: 'bold', color: '#cbd5e1' }} />
+                                        {uniqueStates.map((state, index) => {
+                                            const isLast = index === uniqueStates.length - 1;
+                                            return (
+                                                <Bar key={state} dataKey={state} stackId="a"
+                                                    fill={COLOR_MAP[state] || DEFAULT_COLORS[index % DEFAULT_COLORS.length]}
+                                                    radius={isLast ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                                                    name={state}
+                                                >
+                                                    <LabelList dataKey={state} position="center" fill="#ffffff" fontSize={10} fontWeight="bold" formatter={(val) => (val > 0 ? val : '')} />
+                                                    {isLast && <LabelList dataKey="total" position="top" fill="#ffffff" fontSize={12} fontWeight="900" offset={10} />}
+                                                </Bar>
+                                            );
+                                        })}
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
                         </div>
+
+                        <div className="bg-slate-900/80 backdrop-blur-sm rounded-[2.5rem] border border-slate-700/60 shadow-2xl overflow-hidden flex flex-col hover:border-slate-600/80 transition-all">
+                            <div className="p-6 border-b border-slate-700/40 flex items-center justify-between bg-gradient-to-r from-slate-900/50 to-slate-800/50">
+                                <div className="flex items-center gap-2">
+                                    <Users size={18} className="text-cyan-400"/>
+                                    <h3 className="text-[11px] font-black text-cyan-300 uppercase tracking-widest">Resumen por vendedor y estado</h3>
+                                </div>
+                            </div>
+                            <div className="overflow-auto custom-scrollbar max-h-[500px]">
+                                <table className="w-full text-[10px] bg-slate-900/60">
+                                    <thead className="sticky top-0 z-10">
+                                        <tr className="bg-slate-800/80 text-slate-300 uppercase shadow-sm border-b border-slate-700/40">
+                                            <th className="p-4 text-left font-black sticky left-0 bg-slate-800/80 border-b border-slate-700/40 min-w-[150px] text-cyan-300">Vendedor</th>
+                                            {uniqueStates.map(state => <th key={state} className="p-4 text-center border-b border-slate-700/40 min-w-[80px] bg-slate-800/80 text-cyan-300">{state}</th>)}
+                                            <th className="p-4 text-right border-b border-slate-700/40 bg-slate-800/80 text-cyan-300">TOTAL</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-700/30 bg-slate-900/40">
+                                        {processedData.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-800/40 transition-colors duration-200">
+                                                <td className="p-4 font-bold text-slate-200 sticky left-0 bg-slate-900/40 border-r border-slate-700/20">{row.name}</td>
+                                                {uniqueStates.map(state => <td key={state} className="p-3 text-center text-slate-400">{row[state] || '-'}</td>)}
+                                                <td className="p-4 text-right font-black text-cyan-400">{row.total}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="sticky bottom-0 z-10 font-black text-[10px] uppercase bg-cyan-900/30 text-cyan-300 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)] border-t-2 border-cyan-700/40">
+                                        <tr>
+                                            <td className="p-4 sticky left-0 bg-cyan-900/30 border-r border-cyan-700/40">TOTALES GLOBALES</td>
+                                            {uniqueStates.map(state => (
+                                                <td key={state} className="p-3 text-center">{totals[state] || 0}</td>
+                                            ))}
+                                            <td className="p-4 text-right text-cyan-200 text-xs">{totals.total}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="h-40 flex items-center justify-center border-2 border-dashed rounded-2xl border-slate-700/40 text-slate-400 font-bold text-xs uppercase">
+                        {data.length > 0 ? 'Sin resultados con los filtros aplicados' : 'No hay datos gráficos'}
                     </div>
-                </>
-            ) : (
-                <div className="h-40 flex items-center justify-center border-2 border-dashed rounded-2xl border-slate-700/40 text-slate-400 font-bold text-xs uppercase">
-                    {data.length > 0 ? 'Sin resultados con los filtros aplicados' : 'No hay datos gráficos'}
-                </div>
-            )}
+                )}
+            </div>
+            {/* ── FIN ZONA DE GRÁFICOS ── */}
 
             {/* SECCIÓN: FUENTES DE DATOS EN CASCADA */}
             <div className="pt-8 border-t border-slate-700/40">
@@ -832,16 +895,19 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
                     <div className="h-px flex-1 bg-slate-700/40"></div>
                 </div>
 
-                {/* ── FIX #4: FNZ recibe filtersWithoutVigencia — vigencia NO aplica aquí ── */}
+                {/* FNZ: recibe filtersWithoutVigencia — vigencia NO aplica aquí.
+                    Novedades se traduce en buildGlobalFilterPayload a { con_novedad: true/false } */}
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_fnz" titulo="Detalles de registros FNZ"
                     canLoad={loadStep >= 1} onLoadComplete={() => handleStepComplete(1)}
                     initialColumns={COLUMNAS_FNZ_INICIALES}
                     globalFilters={filtersWithoutVigencia}
+                    isActive={isActive}
                 />
 
-                {/* ── FIX #5: Retanqueos y Cosechas reciben selectedFilters COMPLETO (con vigencia) ── */}
+                {/* Retanqueos y Cosechas reciben selectedFilters COMPLETO (con vigencia).
+                    Novedades también se traduce en buildGlobalFilterPayload. */}
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_retanqueos" titulo="Clientes potenciales para Retanqueos"
@@ -849,6 +915,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters }) => {
                     initialColumns={COLUMNAS_RETANQUEO_INICIALES}
                     filterConfig={filtrosRetanqueo}
                     globalFilters={selectedFilters}
+                    isActive={isActive}
                 />
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}

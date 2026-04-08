@@ -259,13 +259,64 @@ export default function Cartera({ data, selectedFilters }) {
         return Object.entries(selectedFilters).filter(([_, values]) => values && Array.isArray(values) && values.length > 0);
     }, [selectedFilters]);
 
-    const applyFilters = useCallback((dataSet) => {
+ const applyFilters = useCallback((dataSet) => {
         if (!Array.isArray(dataSet)) return [];
         if (activeFilters.length === 0) return dataSet;
-        return dataSet.filter(item => activeFilters.every(([key, values]) => values.includes(item[key])));
+
+        return dataSet.filter(item => 
+            activeFilters.every(([key, values]) => {
+                
+                // Convertimos el nombre del filtro a minúsculas
+                const llaveFiltro = key.toLowerCase();
+
+                // --- 1. LÓGICA ESPECIAL PARA NOVEDADES ---
+                if (llaveFiltro === 'cantidad_novedades' || llaveFiltro === 'novedades' || llaveFiltro === 'tipo_novedad') {
+                    
+                    // Extraemos el valor del JSON respetando mayúsculas/minúsculas
+                    const cantNovedades = item['Cantidad_Novedades'] !== undefined ? item['Cantidad_Novedades'] : item['cantidad_novedades'];
+                    const tipoNovedad = item['Tipo_Novedad'] !== undefined ? item['Tipo_Novedad'] : item['tipo_novedad'];
+
+                    // Si la fila del gráfico no tiene nada de novedades, la dejamos pasar para no dañarlo
+                    if (cantNovedades === undefined && tipoNovedad === undefined) {
+                        return true; 
+                    }
+
+                    // Identificar qué opción eligió el usuario en el filtro
+                    const quiereConNovedad = values.some(v => String(v).toLowerCase().includes('con') || parseInt(v) > 0);
+                    const quiereSinNovedad = values.some(v => String(v).toLowerCase().includes('sin') || String(v) === '0' || parseInt(v) === 0);
+
+                    // Evaluar el JSON: Si es mayor a 0 (ej: 3), tiene novedad. Si es 0, no tiene.
+                    let filaTieneNovedad = false;
+                    
+                    if (cantNovedades !== undefined && cantNovedades !== null) {
+                        filaTieneNovedad = parseInt(cantNovedades) > 0; // Aquí evalúa tu "Cantidad_Novedades": 3
+                    } else if (tipoNovedad !== undefined && tipoNovedad !== null) {
+                        filaTieneNovedad = String(tipoNovedad).trim().toUpperCase() !== 'SIN NOVEDAD';
+                    }
+
+                    // Cruzar los datos
+                    if (quiereConNovedad && filaTieneNovedad) return true;
+                    if (quiereSinNovedad && !filaTieneNovedad) return true;
+                    
+                    return false; // Se oculta si no cumple la condición
+                }
+
+                // --- 2. LÓGICA PARA EL RESTO DE LOS FILTROS ---
+                const valorReal = item[key] !== undefined ? item[key] : item[llaveFiltro];
+                
+                if (valorReal === undefined || valorReal === null || valorReal === '') {
+                    return true; 
+                }
+
+                const valorFila = String(valorReal).trim().toLowerCase();
+                return values.some(val => String(val).trim().toLowerCase() === valorFila);
+            })
+        );
     }, [activeFilters]);
 
-    const processGeneric = useCallback((list, xKey, stackKey, valKey) => {
+
+    // Se agregó sortByXAxis como parámetro opcional para controlar la estrategia de ordenamiento
+    const processGeneric = useCallback((list, xKey, stackKey, valKey, sortByXAxis = false) => {
         const filtered = applyFilters(Array.isArray(list) ? list : (list?.grouped || []));
         if (filtered.length === 0) return { data: [], keys: [] };
 
@@ -290,7 +341,19 @@ export default function Cartera({ data, selectedFilters }) {
             d.total = sortedKeys.reduce((acc, k) => acc + (Number(d[k]) || 0), 0);
         });
         
-        dataArray.sort((a, b) => b.total - a.total);
+        // --- MODIFICACIÓN DE ORDENAMIENTO ---
+        if (sortByXAxis) {
+            // Ordena cronológicamente (alfanuméricamente) usando el eje X (name)
+            dataArray.sort((a, b) => {
+                if (a.name === 'N/A') return 1; // Manda los N/A al final
+                if (b.name === 'N/A') return -1;
+                return String(a.name).localeCompare(String(b.name), undefined, { numeric: true });
+            });
+        } else {
+            // Ordena de mayor a menor volumen total (comportamiento anterior por defecto)
+            dataArray.sort((a, b) => b.total - a.total);
+        }
+
         return { data: dataArray, keys: sortedKeys };
     }, [applyFilters]);
 
@@ -378,7 +441,8 @@ export default function Cartera({ data, selectedFilters }) {
             return {
                 regional: processGeneric(data?.cubo_regional, 'Regional_Venta', 'Franja_Meta', 'count'),
                 cobro: processGeneric(data?.cubo_cobro, 'Eje_X_Cobro', 'Franja_Meta', 'count'),
-                desembolsos: processGeneric(data?.cubo_desembolso, 'Año_Desembolso', 'Franja_Meta', 'Valor_Desembolso'),
+                // Se pasa 'true' como 5to argumento para activar el ordenamiento cronológico por el eje X
+                desembolsos: processGeneric(data?.cubo_desembolso, 'Año_Desembolso', 'Franja_Meta', 'Valor_Desembolso', true),
                 vigencia: buildSunburstData(data?.cubo_vigencia, 'Estado_Vigencia_Agrupado', 'Sub_Estado_Vigencia', 'count')
             };
         } catch (error) {
@@ -407,7 +471,8 @@ export default function Cartera({ data, selectedFilters }) {
                     <LocalStackedBar data={charts.cobro.data} keys={charts.cobro.keys} />
                 </ChartCard>
                 
-                <ChartCard title="Desembolsos" subtitle="Ordenado de mayor a menor volumen" isEmpty={!charts.desembolsos.data || charts.desembolsos.data.length === 0}>
+                {/* Modificación en el UI para que el texto refleje el nuevo ordenamiento */}
+                <ChartCard title="Desembolsos" subtitle="Ordenado cronológicamente por año" isEmpty={!charts.desembolsos.data || charts.desembolsos.data.length === 0}>
                     <LocalStackedBar data={charts.desembolsos.data} keys={charts.desembolsos.keys} isCurrency/>
                 </ChartCard>
                 

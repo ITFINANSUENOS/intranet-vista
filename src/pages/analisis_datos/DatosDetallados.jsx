@@ -20,9 +20,9 @@ const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleCol
     }, [visibleColumns, onToggleColumn]);
 
     const filteredColumns = useMemo(() => {
-        return allColumns.filter(col => 
-            col.label.toLowerCase().includes(columnSearch.toLowerCase())
-        );
+        return allColumns
+            .filter(col => col.label.toLowerCase().includes(columnSearch.toLowerCase()))
+            .sort((a, b) => a.label.localeCompare(b.label)); // <-- Se agregó esta línea
     }, [allColumns, columnSearch]);
 
     return (
@@ -211,18 +211,37 @@ const TablaRemota = ({ titulo, origen, apiClient, jobId, selectedFilters }) => {
         
         setLoading(true);
         try {
+            // 1. Convertir el filtro de texto global a valores numéricos
+            const filtroNovedades = selectedFilters?.Novedades || [];
+            const tieneSinNovedad = filtroNovedades.some(n => n.toLowerCase().includes('sin novedad'));
+            const tieneConNovedad = filtroNovedades.some(n => n.toLowerCase().includes('con novedad'));
+            
+            let cantidadNovedades = undefined;
+        if (tieneSinNovedad && !tieneConNovedad) {
+            cantidadNovedades = [0]; // AHORA ES UN ARREGLO
+        } else if (tieneConNovedad && !tieneSinNovedad) {
+            cantidadNovedades = [1]; // AHORA ES UN ARREGLO
+        }
+
             const mappedFilters = {
                 empresa: selectedFilters?.Empresa || [],
                 call_center_filtro: selectedFilters?.CALL_CENTER_FILTRO || [],
                 zona: selectedFilters?.Zona || [],
                 regional_cobro: selectedFilters?.Regional_Cobro || [],
                 franja: selectedFilters?.Franja_Cartera || [], 
-                novedades: selectedFilters?.Novedades || [],
+                // Eliminamos la clave 'novedades' anterior
                 estado_vigencia: selectedFilters?.Estado_Vigencia || []
             };
 
+            // Inyectamos el parámetro exacto que espera el backend
+            if (cantidadNovedades !== undefined) {
+                mappedFilters.Cantidad_Novedades = cantidadNovedades;
+            }
+
+            // 2. IMPORTANTE: Corregir la validación para que NO elimine el número 0
             Object.keys(mappedFilters).forEach(key => {
-                if (!mappedFilters[key] || mappedFilters[key].length === 0) {
+                const value = mappedFilters[key];
+                if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
                     delete mappedFilters[key];
                 }
             });
@@ -284,29 +303,45 @@ const TablaRemota = ({ titulo, origen, apiClient, jobId, selectedFilters }) => {
 
     // AQUÍ ES DONDE ESTABA EL PROBLEMA: Preparar los datos exactos para la exportación
     const filtrosExport = useMemo(() => {
+        
+        const filtroNovedades = selectedFilters?.Novedades || [];
+        const tieneSinNovedad = filtroNovedades.some(n => n.toLowerCase().includes('sin novedad'));
+        const tieneConNovedad = filtroNovedades.some(n => n.toLowerCase().includes('con novedad'));
+        
+        let cantidadNovedades = undefined;
+        if (tieneSinNovedad && !tieneConNovedad) {
+            cantidadNovedades = 0;
+        } else if (tieneConNovedad && !tieneSinNovedad) {
+            cantidadNovedades = 1;
+        }
+
         const mappedFilters = {
             empresa: selectedFilters?.Empresa || [],
             call_center_filtro: selectedFilters?.CALL_CENTER_FILTRO || [],
             zona: selectedFilters?.Zona || [],
             regional_cobro: selectedFilters?.Regional_Cobro || [],
             franja: selectedFilters?.Franja_Cartera || [],
-            novedades: selectedFilters?.Novedades || [],
             estado_vigencia: selectedFilters?.Estado_Vigencia || []
         };
 
+        if (cantidadNovedades !== undefined) {
+            mappedFilters.Cantidad_Novedades = cantidadNovedades;
+        }
+
         Object.keys(mappedFilters).forEach(key => {
-            if (!mappedFilters[key] || mappedFilters[key].length === 0) {
+            const value = mappedFilters[key];
+            if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
                 delete mappedFilters[key];
             }
         });
 
         return {
-            job_id: jobId, // <-- Aquí está el job_id que pedía el error
+            job_id: jobId,
             origen: origen,
             search_term: search || '',
             page: 1,
-            page_size: 100000, // Ajuste para traer una buena cantidad de registros en Excel
-            columnas_visibles: visibleColumns, // El backend debe filtrar con base en estas columnas
+            page_size: 100000,
+            columnas_visibles: visibleColumns,
             ...mappedFilters
         };
     }, [jobId, origen, search, visibleColumns, selectedFilters]);

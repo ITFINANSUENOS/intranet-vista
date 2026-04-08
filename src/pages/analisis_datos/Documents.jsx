@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import AuthenticatedLayout from '../../layouts/AuthenticatedLayout';
 import { useAuth } from '../../context/AuthContext';
 import { RefreshCw, CheckCircle2, Activity, AlertTriangle, X, Filter as FilterIcon, Clock } from 'lucide-react';
@@ -8,26 +8,77 @@ import Cartera from './Cartera';
 import Seguirientos from './Seguimientos';
 import Resultados from './Resultados';
 import DatosDetallados from './DatosDetallados';
-import Comercial from './Comercial'; 
+import Comercial from './Comercial';
+
 
 import FileUploadButton from '../../components/FileUploadButton'; 
+
+// --- 1. CUSTOM HOOK: useStateRef ---
+function useStateRef(initialValue) {
+    const [state, setState] = useState(initialValue);
+    const ref = useRef(state);
+
+    const dispatch = useCallback((value) => {
+        ref.current = typeof value === 'function' ? value(ref.current) : value;
+        setState(ref.current);
+    }, []);
+
+    return [state, dispatch, ref];
+}
+
+//  HELPER: Leer de sessionStorage de forma segura
+function readSession(key, fallback) {
+    try {
+        const v = sessionStorage.getItem(key);
+        return v ? JSON.parse(v) : fallback;
+    } catch {
+        return fallback;
+    }
+}
+
+// HELPER: Escribir en sessionStorage de forma segura
+function writeSession(key, value) {
+    try {
+        sessionStorage.setItem(key, JSON.stringify(value));
+    } catch { /* quota exceeded — ignorar */ }
+}
 
 export default function Documents() {
     const { apiClient, permissions = [], user } = useAuth();
     const userPermissions = permissions.length > 0 ? permissions : (user?.permissions || []);
 
-    const [activeTab, setActiveTab] = useState('cartera'); 
+    //  CAMBIO: activeTab persiste entre recargas
+    const [activeTab, setActiveTab] = useState(
+        () => readSession('dashboard_activeTab', 'cartera')
+    );
+
+    //  CAMBIO: visitedTabs persiste entre recargas
+    const [visitedTabs, setVisitedTabs] = useState(
+        () => readSession('dashboard_visitedTabs', { cartera: true })
+    );
     
     const [loading, setLoading] = useState(false);
-    const [selectedJobId, setSelectedJobId] = useState(null);
-    const [lastUpdateDate, setLastUpdateDate] = useState(null); 
+
+    //  CAMBIO: selectedJobId persiste entre recargas
+    const [selectedJobId, setSelectedJobId] = useState(
+        () => readSession('dashboard_jobId', null)
+    );
+
+    //  CAMBIO: lastUpdateDate persiste entre recargas
+    const [lastUpdateDate, setLastUpdateDate] = useState(
+        () => readSession('dashboard_lastUpdate', null)
+    );
     
-    // Almacenará la data como caché. Solo se llena si se visita la pestaña.
-    const [moduleData, setModuleData] = useState({ 
-        cartera: null, 
-        seguimientos: null, 
-        resultados: null 
-    });
+    //  CAMBIO: moduleData se inicializa desde sessionStorage
+    const [moduleData, setModuleData, moduleDataRef] = useStateRef(
+        () => readSession('dashboard_moduleData', { 
+            cartera: null,
+            seguimientos: null, 
+            resultados: null,
+            call_center: null,
+            comercial: null
+        })
+    );
     
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [notification, setNotification] = useState(null);
@@ -38,8 +89,9 @@ export default function Documents() {
         Zona: [], 
         Regional_Cobro: [], 
         Franja_Cartera: [],
+        Estado_Vigencia: [],
         Novedades: [],
-        Estado_Vigencia: []
+        Tipo_Novedad: []
     });
 
     const hasActiveFilters = useMemo(() => {
@@ -50,9 +102,12 @@ export default function Documents() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }, [activeTab]);
     
-    // 1. Obtener Reporte Activo Inicial
+    //  CAMBIO: Solo llamar a /reportes/activo si NO tenemos jobId ya guardado
     useEffect(() => {
-        let isMounted = true; // Previene actualizaciones de estado si el componente se desmonta
+        // Si ya tenemos un jobId (de sessionStorage o de estado previo), no pedimos de nuevo
+        if (selectedJobId) return;
+
+        let isMounted = true; 
 
         apiClient.get('/reportes/activo')
             .then((response) => {
@@ -64,27 +119,19 @@ export default function Documents() {
                 
                 if (id) {
                     setSelectedJobId(id);
+                    writeSession('dashboard_jobId', id); // ✅ Persistir
                     
-                    // Extraer y formatear la fecha_actualizacion según la nueva estructura de la API
                     const dateString = responseData?.fecha_actualizacion || responseData?.updated_at || responseData?.created_at;
                     
-                    if (dateString) {
-                        const dateObj = new Date(dateString);
-                        setLastUpdateDate(dateObj.toLocaleString('es-ES', { 
-                            day: '2-digit', 
-                            month: 'short', 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                        }));
-                    } else {
-                        // Fallback si el backend no envía fecha
-                        setLastUpdateDate(new Date().toLocaleString('es-ES', { 
-                            day: '2-digit', 
-                            month: 'short', 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                        }));
-                    }
+                    const date = new Date(dateString || Date.now()).toLocaleString('es-ES', { 
+                        day: '2-digit', 
+                        month: 'short', 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+
+                    setLastUpdateDate(date);
+                    writeSession('dashboard_lastUpdate', date); // ✅ Persistir
                 }
             })
             .catch(err => {
@@ -92,29 +139,43 @@ export default function Documents() {
             });
 
         return () => { isMounted = false; };
-    }, [apiClient]); 
+    //  selectedJobId en dependencias: si ya tiene valor, el guard de arriba previene la llamada
+    }, [apiClient, selectedJobId]); 
 
-    // 2. Carga Diferida (Lazy Fetching)
+    // Carga diferida de pestañas
     useEffect(() => {
         if (!selectedJobId) return;
 
         let isMounted = true;
+        const abortController = new AbortController();
 
         const loadTabData = async () => {
-            if (['cartera', 'seguimientos', 'resultados'].includes(activeTab)) {
-                if (!moduleData[activeTab]) {
+            if (['cartera', 'seguimientos', 'resultados', 'call_center', 'comercial'].includes(activeTab)) {
+                
+                if (!moduleDataRef.current[activeTab]) {
                     setLoading(true);
                     try {
-                        const response = await apiClient.get(`/wallet/init/${activeTab}?job_id=${selectedJobId}`);
+                        const response = await apiClient.get(`/wallet/init/${activeTab}?job_id=${selectedJobId}`, {
+                            signal: abortController.signal
+                        });
+                        
                         if (!isMounted) return;
 
                         const rawData = response.data?.data?.data || response.data?.data || response.data;
                         
-                        setModuleData(prev => ({ 
-                            ...prev, 
-                            [activeTab]: rawData 
-                        }));
+                        // CAMBIO: Persistir moduleData en sessionStorage al actualizar
+                        setModuleData(prev => {
+                            const next = { ...prev, [activeTab]: rawData };
+                            writeSession('dashboard_moduleData', next);
+                            return next;
+                        });
+
                     } catch (error) {
+                        if (error.name === 'CanceledError' || error.message === 'canceled') {
+                            console.log(`Petición cancelada para la pestaña: ${activeTab}`);
+                            return; 
+                        }
+
                         if (isMounted) {
                             console.error(`Error cargando datos de ${activeTab}:`, error);
                             setNotification({ type: 'error', message: `Error al cargar datos de ${activeTab}` });
@@ -128,22 +189,42 @@ export default function Documents() {
 
         loadTabData();
 
-        return () => { isMounted = false; };
-    }, [activeTab, selectedJobId, moduleData, apiClient]); 
+        return () => { 
+            isMounted = false; 
+            abortController.abort();
+        };
+        
+    }, [activeTab, selectedJobId, apiClient]); 
 
     // Notificaciones del Upload
     const handleUploadStart = () => setNotification({ type: 'success', message: 'Iniciando carga...' });
+
     const handleUploadSuccess = (jobId) => {
+        //  CAMBIO: Limpiar caché de datos al subir nuevo reporte
+        sessionStorage.removeItem('dashboard_moduleData');
+        sessionStorage.removeItem('dashboard_jobId');
+        sessionStorage.removeItem('dashboard_lastUpdate');
+
         setSelectedJobId(jobId);
-        setLastUpdateDate(new Date().toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }));
-        setModuleData({ cartera: null, seguimientos: null, resultados: null });
+        writeSession('dashboard_jobId', jobId);
+
+        const date = new Date().toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        setLastUpdateDate(date);
+        writeSession('dashboard_lastUpdate', date);
+
+        setModuleData({ cartera: null, seguimientos: null, resultados: null, call_center: null });
         setNotification({ type: 'success', message: 'Reporte procesado correctamente' });
     };
+
     const handleUploadError = (errorMessage) => setNotification({ type: 'error', message: errorMessage });
 
-    // 3. Optimización O(N) para Extracción de Filtros
+    // Optimización O(N) para Extracción de Filtros
     const filterOptions = useMemo(() => {
-        const keys = ['Empresa', 'CALL_CENTER_FILTRO', 'Zona', 'Regional_Cobro', 'Franja_Cartera', 'Estado_Vigencia'];
+        const keys = [
+            'Empresa', 'CALL_CENTER_FILTRO', 'Zona', 'Regional_Cobro', 
+            'Franja_Cartera', 'Estado_Vigencia', 
+            'Cantidad_Novedades', 'Tipo_Novedad' 
+        ];
         
         const sets = {
             Empresa: new Set(),
@@ -151,7 +232,9 @@ export default function Documents() {
             Zona: new Set(),
             Regional_Cobro: new Set(),
             Franja_Cartera: new Set(),
-            Estado_Vigencia: new Set()
+            Estado_Vigencia: new Set(),
+            Cantidad_Novedades: new Set(), 
+            Tipo_Novedad: new Set()        
         };
 
         const extractFilters = (dataArray) => {
@@ -160,7 +243,7 @@ export default function Documents() {
                 const item = dataArray[i];
                 for (let j = 0; j < keys.length; j++) {
                     const key = keys[j];
-                    if (item[key]) {
+                    if (item[key] !== undefined && item[key] !== null && item[key] !== '') {
                         sets[key].add(item[key]);
                     }
                 }
@@ -192,19 +275,26 @@ export default function Documents() {
     }, []);
 
     const handleClearFilters = useCallback(() => {
-        setSelectedFilters({ Empresa: [], CALL_CENTER_FILTRO: [], Zona: [], Regional_Cobro: [], Franja_Cartera: [], Novedades: [], Estado_Vigencia: []});
+        setSelectedFilters({ 
+            Empresa: [], 
+            CALL_CENTER_FILTRO: [], 
+            Zona: [], 
+            Regional_Cobro: [], 
+            Franja_Cartera: [], 
+            Estado_Vigencia: [],
+            Novedades: [],
+            Tipo_Novedad: []
+        });
     }, []);
 
     return (
         <AuthenticatedLayout title="Panel Cartera">
-            {/* [MODIFICADO]: Se eliminó 'overflow-hidden' de este div para permitir que 'sticky' funcione correctamente */}
             <div className="min-h-screen flex flex-col relative w-full bg-[#041830]">
                 
-                {/* --- CAPA DE DISEÑO LLAMATIVO (Fondo interactivo) --- */}
+                {/* --- CAPA DE DISEÑO LLAMATIVO --- */}
                 <div 
                     className="absolute inset-0 pointer-events-none opacity-60 z-0" 
                     style={{ 
-                        // Degradado radial cian de fondo + Patrón de puntos blancos
                         backgroundImage: `
                             radial-gradient(circle at 50% 30%, rgba(34, 211, 238, 0.1) 0%, transparent 60%), 
                             radial-gradient(rgba(255, 255, 255, 0.04) 1.5px, transparent 1.5px)
@@ -221,11 +311,10 @@ export default function Documents() {
                     </div>
                 )}
                 
-                {/* --- HEADER PROFESIONAL ACTUALIZADO --- */}
-                {/* [MODIFICADO]: Se cambió a z-50 para asegurar que quede por encima del contenido inferior al hacer scroll */}
+                {/* --- HEADER --- */}
                 <header 
                     className="px-4 md:px-8 py-3.5 flex justify-between items-center sticky top-0 z-50 min-h-[5rem] gap-4 shadow-[0_4px_30px_rgba(0,0,0,0.3)] backdrop-blur-md border-b border-white/10 transition-all duration-300"
-                    style={{ backgroundColor: 'rgba(4, 24, 48, 0.85)' }} // Ligeramente transparente para efecto glass
+                    style={{ backgroundColor: 'rgba(4, 24, 48, 0.85)' }} 
                 >
                     <div className="flex items-center gap-4">
                         <button 
@@ -272,10 +361,19 @@ export default function Documents() {
                     
                     <div className="flex items-center gap-4 overflow-x-auto pb-1 md:pb-0 scrollbar-hide">
                         <div className="flex bg-black/20 p-1.5 rounded-xl shrink-0 items-center border border-white/5 shadow-inner">
-                            {['cartera', 'seguimientos', 'detallados', 'resultados', 'comercial'].map(tab => (
+                            {['cartera', 'seguimientos', 'detallados', 'resultados', 'comercial', 'call_center'].map(tab => (
                                 <button 
                                     key={tab} 
-                                    onClick={() => setActiveTab(tab)} 
+                                    onClick={() => {
+                                        setActiveTab(tab);
+                                        writeSession('dashboard_activeTab', tab); // ✅ Persistir pestaña activa
+                                        setVisitedTabs(prev => {
+                                            if (prev[tab]) return prev;
+                                            const next = { ...prev, [tab]: true };
+                                            writeSession('dashboard_visitedTabs', next); // ✅ Persistir tabs visitadas
+                                            return next;
+                                        });
+                                    }}
                                     className={`px-4 md:px-5 py-2 rounded-lg text-[10px] font-bold transition-all duration-300 whitespace-nowrap tracking-wider uppercase ${
                                         activeTab === tab 
                                             ? 'bg-white/15 text-white shadow-sm border border-white/20 backdrop-blur-sm' 
@@ -307,21 +405,29 @@ export default function Documents() {
                 />
                 
                 <main className="flex-1 w-full p-4 md:p-8 relative z-10">
-                    {loading ? (
-                        // [MODIFICADO]: Spinner de carga en modo oscuro
-                        <div className="h-96 w-full flex flex-col items-center justify-center bg-[#0a203f]/50 backdrop-blur-xl rounded-[3rem] shadow-2xl italic text-[10px] font-black text-cyan-200/70 uppercase tracking-widest border border-white/10">
-                            <RefreshCw className="animate-spin text-cyan-400 mb-4" size={32} /> Obteniendo datos...
-                        </div>
-                    ) : (
-                        <div className="space-y-12 pb-10 w-full">
-                            {activeTab === 'cartera' && moduleData.cartera && <Cartera data={moduleData.cartera} selectedFilters={selectedFilters} />}
-                            {activeTab === 'seguimientos' && moduleData.seguimientos && <Seguirientos data={moduleData.seguimientos} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId} />}
-                            {activeTab === 'detallados' && <DatosDetallados apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
-                            {activeTab === 'resultados' && moduleData.resultados && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
-                            {activeTab === 'comercial' && <Comercial apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
-                        </div>
-                    )}
-                </main>
+    {loading ? (
+        <div className="h-96 w-full flex flex-col items-center justify-center bg-[#0a203f]/50 backdrop-blur-xl rounded-[3rem] shadow-2xl italic text-[10px] font-black text-cyan-200/70 uppercase tracking-widest border border-white/10">
+            <RefreshCw className="animate-spin text-cyan-400 mb-4" size={32} /> Obteniendo datos...
+        </div>
+    ) : (
+        <div className="space-y-12 pb-10 w-full">
+            {/* Renderizado estricto: Si no es la pestaña activa, el componente NO existe */}
+            {activeTab === 'detallados'   && <DatosDetallados apiClient={apiClient} jobId={selectedJobId} selectedFilters={selectedFilters} />}
+         {activeTab === 'comercial' && moduleData.comercial && (
+            <Comercial 
+                data={moduleData.comercial} 
+                selectedFilters={selectedFilters} 
+                apiClient={apiClient} 
+                jobId={selectedJobId} 
+            />
+        )}
+            {activeTab === 'cartera'      && moduleData.cartera      && <Cartera data={moduleData.cartera} selectedFilters={selectedFilters} />}
+            {activeTab === 'seguimientos' && moduleData.seguimientos && <Seguirientos data={moduleData.seguimientos} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId} />}
+            {activeTab === 'resultados'   && moduleData.resultados   && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
+            
+        </div>
+    )}
+</main>
             </div>
         </AuthenticatedLayout>
     );
