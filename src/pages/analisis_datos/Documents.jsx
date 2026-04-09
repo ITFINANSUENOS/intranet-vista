@@ -9,6 +9,7 @@ import Seguirientos from './Seguimientos';
 import Resultados from './Resultados';
 import DatosDetallados from './DatosDetallados';
 import Comercial from './Comercial';
+import CallCenter from './CallCenter';
 
 
 import FileUploadButton from '../../components/FileUploadButton'; 
@@ -424,7 +425,7 @@ export default function Documents() {
             {activeTab === 'cartera'      && moduleData.cartera      && <Cartera data={moduleData.cartera} selectedFilters={selectedFilters} />}
             {activeTab === 'seguimientos' && moduleData.seguimientos && <Seguirientos data={moduleData.seguimientos} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId} />}
             {activeTab === 'resultados'   && moduleData.resultados   && <Resultados data={moduleData.resultados} selectedFilters={selectedFilters} apiClient={apiClient} jobId={selectedJobId}/>}
-            
+             {activeTab === 'call_center'  && moduleData.call_center  && <CallCenter data={moduleData.call_center} jobId={selectedJobId} selectedFilters={selectedFilters} apiClient={apiClient} />}
         </div>
     )}
 </main>
