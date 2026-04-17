@@ -5,21 +5,22 @@ import { useAuth } from '../context/AuthContext';
 export default function ProtectedRoute() {
     const { isAuthenticated, loading } = useAuth();
 
-    // 1. Si la app está verificando el token, mostramos un cargando
-    // Esto evita que te expulse mientras verifica tu sesión con /me
+    // 1. Mientras la aplicación verifica el token con el servidor (/me)
+    // mostramos un estado de carga para no redirigir al login por error.
     if (loading) {
         return (
-            <div className="flex justify-center items-center h-screen bg-gray-100">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            <div className="flex flex-col justify-center items-center h-screen bg-gray-100">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-[rgba(4,24,48)]"></div>
+                <p className="mt-4 text-[rgba(4,24,48)] font-medium animate-pulse">Verificando acceso...</p>
             </div>
         );
     }
 
-    // 2. Si terminó de cargar y NO está autenticado, adiós.
+    // 2. Si terminó de cargar y NO hay autenticación confirmada, redirigir.
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
 
-    // 3. Si está autenticado, muestra la ruta protegida (Dashboard, etc)
+    // 3. Si está autenticado, renderiza las rutas hijas (Dashboard, etc.)
     return <Outlet />;
 }

@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Database, Search, ChevronDown, ChevronUp, Columns, ChevronLeft, ChevronRight } from 'lucide-react';
-import ExportExcel from "../../components/cartera_buttons/ExportExcel"; // Ajusta la ruta si es necesario
+// Asegúrate de que las rutas sean correctas para tu proyecto
+import ExportExcel from "../../components/cartera_buttons/ExportExcel"; 
+import { useTablaRemota } from '../../hooks/useDetallados'; 
 
 // ─── BARRA DE HERRAMIENTAS DE TABLA ──────────────────────────────────────────
 const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleColumns, onToggleColumn, exportButton }) => {
@@ -22,7 +24,7 @@ const TableToolbar = React.memo(({ onSearch, searchValue, allColumns, visibleCol
     const filteredColumns = useMemo(() => {
         return allColumns
             .filter(col => col.label.toLowerCase().includes(columnSearch.toLowerCase()))
-            .sort((a, b) => a.label.localeCompare(b.label)); // <-- Se agregó esta línea
+            .sort((a, b) => a.label.localeCompare(b.label));
     }, [allColumns, columnSearch]);
 
     return (
@@ -195,160 +197,23 @@ const TableView = React.memo(({ title, data, columns, loading, pagination, onPag
 });
 TableView.displayName = 'TableView';
 
-// ─── LÓGICA DE DATOS Y CONEXIÓN AL CONTROLADOR ────────────────────────────────
+// ─── CONEXIÓN ENTRE HOOK Y UI ────────────────────────────────────────────────
 const TablaRemota = ({ titulo, origen, apiClient, jobId, selectedFilters }) => {
-    const [data, setData] = useState([]);
-    const [allColumns, setAllColumns] = useState([]);
-    const [visibleColumns, setVisibleColumns] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [search, setSearch] = useState('');
-    const [pagination, setPagination] = useState({ current: 1, total_pages: 0, total_records: 0 });
     
-    const debounceSearch = useRef(null);
-
-    const fetchData = useCallback(async (pageToFetch = 1, searchTerm = search) => {
-        if (!jobId) return;
-        
-        setLoading(true);
-        try {
-            // 1. Convertir el filtro de texto global a valores numéricos
-            const filtroNovedades = selectedFilters?.Novedades || [];
-            const tieneSinNovedad = filtroNovedades.some(n => n.toLowerCase().includes('sin novedad'));
-            const tieneConNovedad = filtroNovedades.some(n => n.toLowerCase().includes('con novedad'));
-            
-            let cantidadNovedades = undefined;
-        if (tieneSinNovedad && !tieneConNovedad) {
-            cantidadNovedades = [0]; // AHORA ES UN ARREGLO
-        } else if (tieneConNovedad && !tieneSinNovedad) {
-            cantidadNovedades = [1]; // AHORA ES UN ARREGLO
-        }
-
-            const mappedFilters = {
-                empresa: selectedFilters?.Empresa || [],
-                call_center_filtro: selectedFilters?.CALL_CENTER_FILTRO || [],
-                zona: selectedFilters?.Zona || [],
-                regional_cobro: selectedFilters?.Regional_Cobro || [],
-                franja: selectedFilters?.Franja_Cartera || [], 
-                // Eliminamos la clave 'novedades' anterior
-                estado_vigencia: selectedFilters?.Estado_Vigencia || []
-            };
-
-            // Inyectamos el parámetro exacto que espera el backend
-            if (cantidadNovedades !== undefined) {
-                mappedFilters.Cantidad_Novedades = cantidadNovedades;
-            }
-
-            // 2. IMPORTANTE: Corregir la validación para que NO elimine el número 0
-            Object.keys(mappedFilters).forEach(key => {
-                const value = mappedFilters[key];
-                if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
-                    delete mappedFilters[key];
-                }
-            });
-
-            const payload = {
-                job_id: jobId,
-                origen: origen, 
-                page: pageToFetch,
-                page_size: 20,
-                search_term: searchTerm,
-                ...mappedFilters 
-            };
-            
-            const response = await apiClient.post('/wallet/buscar', payload);
-            
-            const items = response.data?.data || [];
-            const metaInfo = response.data?.meta || {};
-
-            setData(items);
-            setPagination({
-                current: metaInfo.page || pageToFetch,
-                total_pages: metaInfo.pages || 0,
-                total_records: metaInfo.total || 0
-            });
-
-            if (items.length > 0 && allColumns.length === 0) {
-                const keys = Object.keys(items[0]).filter(k => k !== 'id' && !k.startsWith('_'));
-                const generatedCols = keys.map(k => ({ key: k, label: k.replace(/_/g, ' ') }));
-                setAllColumns(generatedCols);
-                setVisibleColumns(generatedCols.slice(0, 5).map(c => c.key));
-            }
-
-        } catch (error) {
-            console.error("Error cargando tabla remota:", error);
-        } finally {
-            setLoading(false);
-        }
-    }, [apiClient, jobId, origen, selectedFilters, allColumns.length, search]);
-
-    useEffect(() => {
-        fetchData(1, search);
-    }, [fetchData, selectedFilters, jobId]);
-
-    const handleSearch = useCallback((value) => {
-        setSearch(value);
-        clearTimeout(debounceSearch.current);
-        debounceSearch.current = setTimeout(() => {
-            fetchData(1, value);
-        }, 350);
-    }, [fetchData]);
-
-    const handlePageChange = useCallback((newPage) => {
-        fetchData(newPage, search);
-    }, [fetchData, search]);
-
-    const toggleColumn = useCallback((key) => {
-        setVisibleColumns(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
-    }, []);
-
-    // AQUÍ ES DONDE ESTABA EL PROBLEMA: Preparar los datos exactos para la exportación
-    const filtrosExport = useMemo(() => {
-        
-        const filtroNovedades = selectedFilters?.Novedades || [];
-        const tieneSinNovedad = filtroNovedades.some(n => n.toLowerCase().includes('sin novedad'));
-        const tieneConNovedad = filtroNovedades.some(n => n.toLowerCase().includes('con novedad'));
-        
-        let cantidadNovedades = undefined;
-        if (tieneSinNovedad && !tieneConNovedad) {
-            cantidadNovedades = 0;
-        } else if (tieneConNovedad && !tieneSinNovedad) {
-            cantidadNovedades = 1;
-        }
-
-        const mappedFilters = {
-            empresa: selectedFilters?.Empresa || [],
-            call_center_filtro: selectedFilters?.CALL_CENTER_FILTRO || [],
-            zona: selectedFilters?.Zona || [],
-            regional_cobro: selectedFilters?.Regional_Cobro || [],
-            franja: selectedFilters?.Franja_Cartera || [],
-            estado_vigencia: selectedFilters?.Estado_Vigencia || []
-        };
-
-        if (cantidadNovedades !== undefined) {
-            mappedFilters.Cantidad_Novedades = cantidadNovedades;
-        }
-
-        Object.keys(mappedFilters).forEach(key => {
-            const value = mappedFilters[key];
-            if (value === undefined || value === null || (Array.isArray(value) && value.length === 0)) {
-                delete mappedFilters[key];
-            }
-        });
-
-        return {
-            job_id: jobId,
-            origen: origen,
-            search_term: search || '',
-            page: 1,
-            page_size: 100000,
-            columnas_visibles: visibleColumns,
-            ...mappedFilters
-        };
-    }, [jobId, origen, search, visibleColumns, selectedFilters]);
-
-    const columnsToRender = useMemo(() => {
-        return allColumns.filter(col => visibleColumns.includes(col.key));
-    }, [allColumns, visibleColumns]);
+    // Todo el estado, filtrado y lógica viene del Hook ahora
+    const {
+        data,
+        allColumns,
+        visibleColumns,
+        columnsToRender,
+        loading,
+        search,
+        pagination,
+        filtrosExport,
+        handleSearch,
+        handlePageChange,
+        toggleColumn
+    } = useTablaRemota({ apiClient, jobId, origen, selectedFilters });
 
     return (
         <div className="space-y-4 mb-10">
@@ -360,7 +225,7 @@ const TablaRemota = ({ titulo, origen, apiClient, jobId, selectedFilters }) => {
                 onToggleColumn={toggleColumn}
                 exportButton={
                     <ExportExcel
-                        filtros={filtrosExport} // SE PASAN LOS FILTROS DINÁMICOS AQUÍ
+                        filtros={filtrosExport} 
                         fileName={`${titulo.replace(/\s+/g, '_')}.xlsx`}
                         tableTitle={titulo}
                         isAvailable={data.length > 0 && visibleColumns.length > 0}

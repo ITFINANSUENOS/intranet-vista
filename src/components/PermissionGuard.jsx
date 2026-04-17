@@ -5,22 +5,26 @@ import { useAuth } from '../context/AuthContext';
 export const PermissionGuard = ({ children, permission }) => {
     const { user, loading } = useAuth();
 
-    // Mientras se verifica el token, no renderizamos nada para evitar saltos
+    // Mientras se verifica la identidad, no renderizamos nada o mostramos un skeleton
     if (loading) return null;
 
-    // 1. Verificar si es Super_usuario (tal cual está en tu RolesAndPermissionsSeeder.php)
-    const isAdmin = user?.roles?.some(role => 
-        (typeof role === 'string' ? role : role.name).toUpperCase() === 'SUPER_USUARIO'
-    );
+    // 1. Verificación de SUPER_USUARIO (Acceso total)
+    // Usamos encadenamiento opcional (?.) y aseguramos que el valor sea un string antes de comparar.
+    const isAdmin = user?.roles?.some(role => {
+        const roleName = typeof role === 'string' ? role : role.name;
+        return roleName?.toUpperCase() === 'SUPER_USUARIO';
+    });
 
-    // 2. Verificar si el array de permisos contiene el permiso solicitado
-    // Aseguramos que tratamos con strings simples
-    const hasPermission = user?.permissions?.some(p => 
-        (typeof p === 'string' ? p : p.name) === permission
-    );
+    // 2. Verificación de Permiso Específico
+    const hasPermission = user?.permissions?.some(p => {
+        const permName = typeof p === 'string' ? p : p.name;
+        return permName === permission;
+    });
 
-    // Si no es admin y no tiene el permiso, redirigir
+    // 3. Lógica de Redirección
+    // Si no es administrador y tampoco tiene el permiso solicitado, se le devuelve al dashboard.
     if (!isAdmin && !hasPermission) {
+        console.warn(`Acceso denegado: Se requiere el permiso [${permission}]`);
         return <Navigate to="/dashboard" replace />;
     }
 

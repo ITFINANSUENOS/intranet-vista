@@ -1,277 +1,32 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList 
 } from 'recharts';
 import { 
-    RefreshCw, AlertCircle, TrendingUp, Users, SearchX, Search, Check, Trophy, 
-    Database, Columns, X, Loader2, Clock, AlertTriangle, XCircle, Filter,
+    RefreshCw, AlertCircle, TrendingUp, Users, Search, Check, Trophy, 
+    Database, Columns, Loader2, Clock, AlertTriangle, XCircle, Filter,
     ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown
 } from 'lucide-react';
 import ExportExcel from "../../components/cartera_buttons/ExportExcel";
 import { COLOR_MAP, DEFAULT_COLORS } from './DashboardComponents';
 
-// ==========================================
-// 1. CONFIGURACIÓN COLUMNAS (5 INICIALES)
-// ==========================================
+import { useComercial, useTablaRemota } from '../../hooks/useComercial'; 
 
-const COLUMNAS_FNZ_INICIALES = [
-    "Estado", "Nombre", "Cedula_Cliente", "Ciudad", "Nombre_Vendedor"
-];
-const COLUMNAS_RETANQUEO_INICIALES = [
-    "Credito", "Nombre_Vendedor", "Vendedor_Activo", "Regional_Venta", "Cuotas_Pagadas"
-];
-const COLUMNAS_COSECHA_INICIALES = [
-    "Credito", "Cedula_Cliente", "Nombre_Cliente", "Celular", "Dias_Atraso_Final"
-];
+const COLUMNAS_FNZ_INICIALES = ["Estado", "Nombre", "Cedula_Cliente", "Ciudad", "Nombre_Vendedor"];
+const COLUMNAS_RETANQUEO_INICIALES = ["Credito", "Nombre_Vendedor", "Vendedor_Activo", "Regional_Venta", "Cuotas_Pagadas"];
+const COLUMNAS_COSECHA_INICIALES = ["Credito", "Cedula_Cliente", "Nombre_Cliente", "Celular", "Dias_Atraso_Final"];
 
-// ==========================================
-const FILTER_KEY_MAP = {
-
-};
-
-// ==========================================
-// MAPEO DE VALORES DE VIGENCIA
-// ==========================================
-const VIGENCIA_VALUE_MAP = {
-    'VIGENTE':           'VIGENTES',
-    'VIGENTES':          'VIGENTES',
-    'EXPIRADA':          'VIGENCIA EXPIRADA',
-    'VIGENCIA EXPIRADA': 'VIGENCIA EXPIRADA',
-    'DIAS 1-10':         'DIAS 1-10',
-    'DIAS 11-20':        'DIAS 11-20',
-    'DIAS 21+':          'DIAS 21+',
-};
-
-// ==========================================
-const resolveNovedadesPayload = (novedadesArray) => {
-    if (!novedadesArray || novedadesArray.length === 0) return {};
-
-    const wantsConNovedad = novedadesArray.some(
-        v => String(v).toLowerCase().includes('con') || parseInt(v) > 0
-    );
-    const wantsSinNovedad = novedadesArray.some(
-        v => String(v).toLowerCase().includes('sin') || String(v) === '0' || parseInt(v) === 0
-    );
-
-    // Ambos seleccionados → sin restricción (equivale a no filtrar)
-    if (wantsConNovedad && wantsSinNovedad) return {};
-
-    if (wantsConNovedad)  return { con_novedad: true  };
-    if (wantsSinNovedad)  return { con_novedad: false };
-    return {};
-};
-
-// ==========================================
-// 2. COMPONENTE DE TABLA REMOTA
-// ==========================================
 const TablaComercialRemota = ({ 
     apiClient, jobId, origen, titulo, icono: Icono, canLoad, onLoadComplete, 
-    colorBadge, initialColumns = [], filterConfig = [],
-    // ── Filtros globales del sidebar ──────────────────────────────────────────
-    globalFilters = {}
+    colorBadge, initialColumns = [], filterConfig = [], globalFilters = {}
 }) => {
-    const [tableData, setTableData] = useState([]); 
-    const [columns, setColumns] = useState([]); 
-    const [visibleColumns, setVisibleColumns] = useState([]); 
-    const [loading, setLoading] = useState(false);
-    const [dataLoaded, setDataLoaded] = useState(false); 
-    const [pagination, setPagination] = useState({
-        current: 1, total_pages: 0, total_records: 0, page_size: 15
-    });
-    const [showColumnSelector, setShowColumnSelector] = useState(false);
-    const [columnSearch, setColumnSearch] = useState('');
-    const [activeFilters, setActiveFilters] = useState({});
-    const [tempFilters, setTempFilters] = useState({});
-
-    // ── Opciones dinámicas: se extraen de los datos cargados de ESTA tabla ──────
-    const [dynamicOptions, setDynamicOptions] = useState({});
-
-    // ── buildGlobalFilterPayload: normaliza los filtros globales para el backend ──
-    //    MODIFICADO: incluye traducción especial para Novedades via resolveNovedadesPayload
-    const buildGlobalFilterPayload = useCallback((gf) => {
-        const KEY_MAP = {
-            Empresa:            'empresa',
-            Zona:               'zona',
-            Regional_Cobro:     'regional_cobro',
-            Franja_Cartera:     'franja',
-            CALL_CENTER_FILTRO: 'call_center_filtro',
-            Estado_Vigencia:    'estado_vigencia',
-        };
-
-        const UPPERCASE_KEYS = new Set(['Empresa', 'Zona', 'Regional_Cobro', 'CALL_CENTER_FILTRO']);
-
-        const result = {};
-        Object.entries(gf || {}).forEach(([key, value]) => {
-            // ── NOVEDADES: traducción especial ───────────────────────────────────
-            // selectedFilters.Novedades → { con_novedad: true/false }
-            // Misma lógica que Resultados.jsx: "Con Novedad" = Cantidad_Novedades > 0
-            //                                  "Sin Novedad" = Cantidad_Novedades === 0
-            if (key === 'Novedades') {
-                const novedadesPayload = resolveNovedadesPayload(Array.isArray(value) ? value : [value]);
-                Object.assign(result, novedadesPayload);
-                return; // no procesar más este key
-            }
-
-            if (Array.isArray(value) && value.length > 0) {
-                const backendKey = KEY_MAP[key] ?? key.toLowerCase();
-
-                if (key === 'Estado_Vigencia') {
-                    result[backendKey] = value.map(v => {
-                        const upper = String(v).toUpperCase().trim();
-                        return VIGENCIA_VALUE_MAP[upper] || upper;
-                    });
-                } else if (UPPERCASE_KEYS.has(key)) {
-                    result[backendKey] = value.map(v => String(v).toUpperCase().trim());
-                } else {
-                    result[backendKey] = value;
-                }
-            }
-        });
-        return result;
-    }, []);
-
-    // Extrae valores únicos por columna de los datos recibidos para poblar los dropdowns
-    const extractDynamicOptions = useCallback((data) => {
-        if (!data || data.length === 0 || filterConfig.length === 0) return;
-        const newOptions = {};
-        filterConfig.forEach(({ key }) => {
-            const valores = [...new Set(data.map(row => row[key]).filter(v => v !== null && v !== undefined && v !== ''))];
-            valores.sort();
-            newOptions[key] = valores;
-        });
-        setDynamicOptions(newOptions);
-    }, [filterConfig]);
-
-    // ── FETCH DATA ───────────────────────────────────────────────────────────────
-    const fetchData = useCallback(async (pageToLoad = 1, filtersToApply = activeFilters) => {
-        if (!jobId) return;
-        setLoading(true);
-        try {
-            // Filtros locales de la tabla (columnas propias)
-            const formattedFilters = {};
-            Object.entries(filtersToApply).forEach(([key, value]) => {
-                if (value && value !== "") {
-                    const backendKey = FILTER_KEY_MAP[key] ?? key;
-                    formattedFilters[backendKey] = Array.isArray(value) ? value : [value.trim()];
-                }
-            });
-
-            // ── Filtros globales del sidebar (incluye Novedades traducido) ──────
-            const globalPayload = buildGlobalFilterPayload(globalFilters);
-
-            const payload = {
-                job_id: jobId,
-                origen,
-                search_term: "",
-                page: pageToLoad,
-                page_size: 15,
-                // Los globales van primero; los locales tienen prioridad si coinciden
-                ...globalPayload,
-                ...formattedFilters
-            };
-
-            const response = await apiClient.post('/wallet/buscar', payload);
-            const responseData = response.data?.data || [];
-            const meta = response.data?.meta || {};
-
-            if (responseData.length > 0 && columns.length === 0) {
-                const detectedCols = Object.keys(responseData[0]);
-                setColumns(detectedCols);
-                if (initialColumns && initialColumns.length > 0) {
-                    const orderedVisibleCols = initialColumns.filter(col => detectedCols.includes(col));
-                    setVisibleColumns(orderedVisibleCols.length > 0 ? orderedVisibleCols : detectedCols);
-                } else {
-                    setVisibleColumns(detectedCols);
-                }
-                extractDynamicOptions(responseData);
-            }
-
-            setTableData(responseData);
-            setPagination({
-                current: meta.page || pageToLoad,
-                total_pages: meta.pages || 0,
-                total_records: meta.total || 0,
-                page_size: meta.page_size || 15
-            });
-            setDataLoaded(true);
-        } catch (err) {
-            console.error(`Error cargando tabla ${origen}:`, err);
-        } finally {
-            setLoading(false);
-            if (onLoadComplete) onLoadComplete();
-        }
-    }, [jobId, origen, apiClient, columns.length, initialColumns, onLoadComplete, extractDynamicOptions, globalFilters, buildGlobalFilterPayload]);
-
-    // ── Carga inicial en cascada ─────────────────────────────────────────────
-    useEffect(() => {
-        if (jobId && canLoad && !dataLoaded && !loading) fetchData(1, {});
-    }, [jobId, canLoad, dataLoaded, loading, fetchData]);
-
-    // ── Cuando cambian los filtros globales, solo recargar datos sin limpiar la vista ──
-    const globalFiltersKey = useMemo(() => JSON.stringify(globalFilters), [globalFilters]);
-    useEffect(() => {
-        if (dataLoaded) {
-            setActiveFilters({});
-            setTempFilters({});
-            setPagination({ current: 1, total_pages: 0, total_records: 0, page_size: 15 });
-            fetchData(1, {});
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [globalFiltersKey]);
-
-    const handlePageChange = (newPage) => {
-        if (newPage >= 1 && newPage <= pagination.total_pages) fetchData(newPage, activeFilters);
-    };
-
-    // ── handleFilterChange: aplica inmediatamente al cambiar un select ───────────
-    const handleFilterChange = (col, value) => {
-        setTempFilters(prev => ({ ...prev, [col]: value }));
-        const nextFilters = { ...activeFilters, [col]: value };
-        if (!value || value === "") delete nextFilters[col];
-        setActiveFilters(nextFilters);
-        fetchData(1, nextFilters);
-    };
-
-    const applyFilter = (col) => {
-        const value = tempFilters[col];
-        const newFilters = { ...activeFilters, [col]: value };
-        if (!value) delete newFilters[col];
-        setActiveFilters(newFilters);
-        fetchData(1, newFilters); 
-    };
+    const { 
+        state: { tableData, visibleColumns, loading, dataLoaded, pagination, showColumnSelector, columnSearch, activeFilters, tempFilters, dynamicOptions },
+        actions: { setColumnSearch, setShowColumnSelector, toggleColumnVisibility, handleMostrarTodas, handleOcultarTodas, handlePageChange, handleFilterChange, applyFilter, clearFilters },
+        derived: { filteredColumns, filtrosExport }
+    } = useTablaRemota({ apiClient, jobId, origen, canLoad, onLoadComplete, initialColumns, filterConfig, globalFilters });
 
     const handleKeyDown = (e, col) => { if (e.key === 'Enter') applyFilter(col); };
-    const clearFilters = () => { setTempFilters({}); setActiveFilters({}); fetchData(1, {}); };
-
-    const toggleColumnVisibility = (col) => {
-        setVisibleColumns(prev => prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]);
-    };
-    const handleMostrarTodas = () => setVisibleColumns(columns);
-    const handleOcultarTodas = () => setVisibleColumns([]);
-    const filteredColumns = columns.filter(col => col.toLowerCase().includes(columnSearch.toLowerCase()));
-
-    const filtrosExport = useMemo(() => {
-        const formattedFilters = {};
-        Object.entries(activeFilters).forEach(([key, value]) => {
-            if (value) {
-                const backendKey = FILTER_KEY_MAP[key] ?? key;
-                formattedFilters[backendKey] = Array.isArray(value) ? value : [value.trim()];
-            }
-        });
-
-        const globalPayload = buildGlobalFilterPayload(globalFilters);
-
-        return { 
-            job_id: jobId, 
-            origen, 
-            search_term: "", 
-            page: 1,
-            page_size: 100000,
-            ...globalPayload,
-            ...formattedFilters,
-            columnas_visibles: visibleColumns.length > 0 ? visibleColumns : columns
-        };
-    }, [jobId, origen, activeFilters, visibleColumns, columns, globalFilters, buildGlobalFilterPayload]);
 
     return (
         <div className="bg-slate-900/80 backdrop-blur-sm rounded-[2rem] border border-slate-700/60 shadow-2xl overflow-hidden flex flex-col mb-8 animate-in fade-in slide-in-from-bottom-4 transition-all duration-500 hover:border-slate-600/80">
@@ -345,7 +100,6 @@ const TablaComercialRemota = ({
                     )}
                 </div>
 
-                {/* ── BARRA DE FILTROS ─────────────────────────────────────────────────────── */}
                 {filterConfig.length > 0 && dataLoaded && (
                     <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-700/40 animate-in slide-in-from-top-1">
                         <div className="flex items-center gap-2 text-slate-400 mr-2">
@@ -473,10 +227,6 @@ const TablaComercialRemota = ({
     );
 };
 
-// ==========================================
-// 3. SELECT REUTILIZABLE PARA FILTROS DEL CHART
-// ==========================================
-
 const ChartFilterSelect = ({ label, value, options, onChange, active }) => (
     <div className="relative min-w-[160px]">
         <select
@@ -500,204 +250,20 @@ const ChartFilterSelect = ({ label, value, options, onChange, active }) => (
     </div>
 );
 
-// ==========================================
-// 4. COMPONENTE PRINCIPAL
-// ==========================================
-
-const findKeyInObject = (obj, targetKey) => {
-    if (!obj || typeof obj !== 'object') return null;
-    if (Object.prototype.hasOwnProperty.call(obj, targetKey)) return obj[targetKey];
-    for (const key in obj) {
-        if (Object.prototype.hasOwnProperty.call(obj, key)) {
-            const child = obj[key];
-            if (typeof child === 'object') {
-                const result = findKeyInObject(child, targetKey);
-                if (result) return result;
-            }
-        }
-    }
-    return null;
-};
-
 const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
-    const [data, setData] = useState([]);
-    const [loadingCharts, setLoadingCharts] = useState(false);
-    const [error, setError] = useState(null);
-    const [loadStep, setLoadStep] = useState(0);
+    const {
+        state: { data, loadingCharts, error, loadStep, chartFilters, filtersWithoutVigencia },
+        actions: { setChartFilters, clearChartFilters, handleStepComplete },
+        dataSets: { raw: { uniqueStates: allStates, uniqueAnalistas, uniqueRegionals }, filtered: { processedData, uniqueStates, totals }, chartData, filteredDataList }
+    } = useComercial(apiClient, jobId, selectedFilters);
 
-    // ── Ref para detectar si el jobId cambió (carga nueva) o solo los filtros ──
-    const prevJobIdRef = useRef(null);
-
-    // ── FILTROS LOCALES para gráfico + tabla resumen ──
-    const [chartFilters, setChartFilters] = useState({
-        Estado: '',
-        Analista_Asociado: '',
-        Regional_Venta: '',
-    });
-
-    // ── Separar vigencia del resto de filtros ─────────────────────────────────
-    // filtersWithoutVigencia → afecta el gráfico/chart y la tabla FNZ
-    // selectedFilters completo → afecta retanqueos y cosechas
-    const filtersWithoutVigencia = useMemo(() => {
-        const { Estado_Vigencia, ...rest } = selectedFilters || {};
-        return rest;
-    }, [selectedFilters]);
-
-    // ── buildChartGetParams: traduce los filtros globales para el GET del gráfico ──
-    // MODIFICADO: incluye traducción de Novedades igual que buildGlobalFilterPayload,
-    // usando resolveNovedadesPayload para convertir 'Con Novedad'/'Sin Novedad'
-    // en { con_novedad: true/false } que el backend puede interpretar.
-    const buildChartGetParams = useCallback((filters) => {
-        const params = {};
-
-        Object.entries(filters || {}).forEach(([key, value]) => {
-            // ── NOVEDADES: misma lógica que Resultados.jsx ───────────────────────
-            //   'Con Novedad' → Cantidad_Novedades > 0 → con_novedad: true
-            //   'Sin Novedad' → Cantidad_Novedades === 0 → con_novedad: false
-            if (key === 'Novedades') {
-                const novedadesPayload = resolveNovedadesPayload(Array.isArray(value) ? value : [value]);
-                Object.assign(params, novedadesPayload);
-                return;
-            }
-
-            if (Array.isArray(value) && value.length > 0) {
-                // Para GET, axios serializa arrays. Enviamos tal cual para los demás filtros.
-                params[key] = value;
-            }
-        });
-
-        return params;
-    }, []);
-
-    // ── El gráfico se recarga cuando cambian filtros que NO son vigencia ──
-    // Solo se reinicia completamente cuando cambia el jobId.
-    useEffect(() => {
-        if (!jobId) return;
-
-        const isNewJob = prevJobIdRef.current !== jobId;
-        prevJobIdRef.current = jobId;
-
-        setLoadingCharts(true);
-        setError(null);
-
-        if (isNewJob) {
-            setData([]);
-            setLoadStep(0);
-            setChartFilters({ Estado: '', Analista_Asociado: '', Regional_Venta: '' });
-        }
-
-        // Construir los params GET con Novedades correctamente traducido
-        const chartParams = buildChartGetParams(filtersWithoutVigencia);
-
-        apiClient.get(`/wallet/init/comercial`, { 
-            params: { job_id: jobId, ...chartParams } 
-        })
-        .then(response => {
-            const foundData = findKeyInObject(response.data, 'fnz_resumen');
-            setData(Array.isArray(foundData) ? foundData : []);
-        })
-        .catch(err => {
-            console.error("Error comercial:", err);
-            setError("Error cargando resumen.");
-        })
-        .finally(() => {
-            setLoadingCharts(false);
-            if (isNewJob) {
-                setLoadStep(1);
-            } else {
-                setLoadStep(prev => (prev > 0 ? prev : 1));
-            }
-        });
-    // filtersWithoutVigencia incluye Novedades (sin Estado_Vigencia), buildChartGetParams lo traduce
-    }, [jobId, apiClient, filtersWithoutVigencia, buildChartGetParams]);
-
-    const handleStepComplete = useCallback((currentStep) => {
-        setLoadStep(prev => prev === currentStep ? prev + 1 : prev);
-    }, []);
-
-    // ── Procesa el raw data y extrae valores únicos ──
-    const processRawData = (rawData) => {
-        if (!rawData || rawData.length === 0) return {
-            processedData: [], uniqueStates: [], totals: {},
-            uniqueSellers: [], uniqueRegionals: [], uniqueActivos: [], uniqueAnalistas: []
-        };
-
-        const statesSet    = new Set();
-        const sellersSet   = new Set();
-        const regionalsSet = new Set();
-        const activosSet   = new Set();
-        const analistasSet = new Set();
-        const grouped      = {};
-
-        rawData.forEach(item => {
-            const vendedor  = String(item.Nombre_Vendedor    || item.nombre_vendedor    || 'SIN VENDEDOR').trim();
-            const estado    = String(item.Estado             || item.estado             || 'SIN ESTADO').toUpperCase().trim();
-           const regional = String(item.Regional_Venta || item.regional_venta || item.Regional || item.regional || item.Regional_Cobro || item.regional_cobro || '').trim();
-            const activo    = String(item.Vendedor_Activo   || item.vendedor_activo   || '').trim();
-            const analista  = String(item.Analista_Asociado || item.analista_asociado || '').trim();
-
-            if (estado)   statesSet.add(estado);
-            if (vendedor) sellersSet.add(vendedor);
-            if (regional) regionalsSet.add(regional);
-            if (activo)   activosSet.add(activo);
-            if (analista) analistasSet.add(analista);
-
-            if (!grouped[vendedor]) grouped[vendedor] = { name: vendedor, total: 0 };
-            grouped[vendedor][estado] = (grouped[vendedor][estado] || 0) + 1;
-            grouped[vendedor].total  += 1;
-        });
-
-        const uniqueStates    = Array.from(statesSet).sort();
-        const uniqueSellers   = Array.from(sellersSet).sort();
-        const uniqueRegionals = Array.from(regionalsSet).sort();
-        const uniqueActivos   = Array.from(activosSet).sort();
-        const uniqueAnalistas = Array.from(analistasSet).sort();
-
-        const processedData = Object.values(grouped).sort((a, b) => b.total - a.total);
-
-        const totals = { total: 0 };
-        uniqueStates.forEach(s => totals[s] = 0);
-        processedData.forEach(row => {
-            totals.total += row.total;
-            uniqueStates.forEach(s => { if (row[s]) totals[s] += row[s]; });
-        });
-
-        return { processedData, uniqueStates, totals, uniqueSellers, uniqueRegionals, uniqueActivos, uniqueAnalistas };
-    };
-
-    // Opciones extraídas de TODOS los datos (sin filtrar) para los dropdowns del chart
-    const { uniqueStates: allStates, uniqueSellers, uniqueRegionals, uniqueActivos, uniqueAnalistas } =
-        useMemo(() => processRawData(data), [data]);
-
-    // Datos filtrados localmente para gráfico y tabla resumen
-    const filteredData = useMemo(() => {
-        if (!data || data.length === 0) return [];
-        return data.filter(item => {
-            const estado   = String(item.Estado            || item.estado            || '').toUpperCase().trim();
-            const analista = String(item.Analista_Asociado || item.analista_asociado || '').trim();
-           const regional = String(item.Regional_Venta || item.regional_venta || item.Regional || item.regional || item.Regional_Cobro || item.regional_cobro || '').trim();
-
-            if (chartFilters.Estado           && estado   !== chartFilters.Estado.toUpperCase().trim()) return false;
-            if (chartFilters.Analista_Asociado && analista !== chartFilters.Analista_Asociado.trim())    return false;
-            if (chartFilters.Regional_Venta   && regional !== chartFilters.Regional_Venta.trim())         return false;
-            return true;
-        });
-    }, [data, chartFilters]);
-
-    const { processedData, uniqueStates, totals } =
-        useMemo(() => processRawData(filteredData), [filteredData]);
-
-    const chartData = useMemo(() => processedData.slice(0, 15), [processedData]);
-
-    // ── CONFIGURACIÓN DE FILTROS PARA LA TABLA RETANQUEOS ────────────────────────
     const filtrosRetanqueo = useMemo(() => [
-        { key: 'Vendedor_Activo', label: 'Activo',   type: 'select', options: [] },
+        { key: 'Vendedor_Activo', label: 'Activo', type: 'select', options: [] },
         { key: 'Nombre_Vendedor', label: 'Vendedor', type: 'select', options: [] },
-        { key: 'Regional_Venta',  label: 'Regional', type: 'select', options: [] }
+        { key: 'Regional_Venta', label: 'Regional', type: 'select', options: [] }
     ], []);
 
     const activeChartFilterCount = Object.values(chartFilters).filter(Boolean).length;
-    const clearChartFilters = () => setChartFilters({ Estado: '', Analista_Asociado: '', Regional_Venta: '' });
 
     if (error) {
         return (
@@ -710,10 +276,6 @@ const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
 
     return (
         <div className="space-y-6 animate-in slide-in-from-bottom-8 duration-700 fade-in">
-
-            {/* ══════════════════════════════════════════
-                ZONA DE GRÁFICOS — overlay de carga inline
-            ══════════════════════════════════════════ */}
             <div className="relative space-y-6">
                 {loadingCharts && (
                     <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-[2rem] min-h-[200px]">
@@ -724,11 +286,8 @@ const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
                     </div>
                 )}
 
-                {/* BARRA DE FILTROS — afecta gráfico + tabla */}
                 {data.length > 0 && (
                     <div className="bg-slate-900/80 backdrop-blur-sm rounded-2xl border border-slate-700/60 shadow-xl px-5 py-3.5 flex flex-wrap items-center gap-3">
-
-                        {/* Ícono + label */}
                         <div className="flex items-center gap-2 shrink-0">
                             <div className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/60">
                                 <Filter size={13} className="text-cyan-400" />
@@ -743,34 +302,19 @@ const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
 
                         <div className="w-px h-6 bg-slate-700/60 shrink-0" />
 
-                        {/* Estado */}
                         <ChartFilterSelect
-                            label="Estado"
-                            value={chartFilters.Estado}
-                            options={allStates}
-                            onChange={(v) => setChartFilters(prev => ({ ...prev, Estado: v }))}
-                            active={!!chartFilters.Estado}
+                            label="Estado" value={chartFilters.Estado} options={allStates}
+                            onChange={(v) => setChartFilters(prev => ({ ...prev, Estado: v }))} active={!!chartFilters.Estado}
+                        />
+                        <ChartFilterSelect
+                            label="Analista" value={chartFilters.Analista_Asociado} options={uniqueAnalistas}
+                            onChange={(v) => setChartFilters(prev => ({ ...prev, Analista_Asociado: v }))} active={!!chartFilters.Analista_Asociado}
+                        />
+                        <ChartFilterSelect
+                            label="Regional" value={chartFilters.Regional_Venta} options={uniqueRegionals}
+                            onChange={(v) => setChartFilters(prev => ({ ...prev, Regional_Venta: v }))} active={!!chartFilters.Regional_Venta}
                         />
 
-                        {/* Analista_Asociado */}
-                        <ChartFilterSelect
-                            label="Analista"
-                            value={chartFilters.Analista_Asociado}
-                            options={uniqueAnalistas}
-                            onChange={(v) => setChartFilters(prev => ({ ...prev, Analista_Asociado: v }))}
-                            active={!!chartFilters.Analista_Asociado}
-                        />
-
-                        {/* Regional_Venta */}
-                        <ChartFilterSelect
-                            label="Regional"
-                            value={chartFilters.Regional_Venta}
-                            options={uniqueRegionals}
-                            onChange={(v) => setChartFilters(prev => ({ ...prev, Regional_Venta: v }))}
-                            active={!!chartFilters.Regional_Venta}
-                        />
-
-                        {/* Limpiar */}
                         {activeChartFilterCount > 0 && (
                             <button
                                 onClick={clearChartFilters}
@@ -780,18 +324,16 @@ const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
                             </button>
                         )}
 
-                        {/* Contador */}
                         <div className="ml-auto shrink-0">
                             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
                                 Mostrando{' '}
-                                <span className="text-cyan-400 font-black">{filteredData.length}</span>
+                                <span className="text-cyan-400 font-black">{filteredDataList.length}</span>
                                 {' '}/ {data.length} registros
                             </span>
                         </div>
                     </div>
                 )}
 
-                {/* GRÁFICOS Y RESUMEN */}
                 {processedData.length > 0 ? (
                     <>
                         <div className="bg-slate-900/80 backdrop-blur-sm p-6 md:p-8 rounded-[2.5rem] border border-slate-700/60 shadow-2xl hover:border-slate-600/80 transition-all">
@@ -885,9 +427,7 @@ const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
                     </div>
                 )}
             </div>
-            {/* ── FIN ZONA DE GRÁFICOS ── */}
 
-            {/* SECCIÓN: FUENTES DE DATOS EN CASCADA */}
             <div className="pt-8 border-t border-slate-700/40">
                 <div className="flex items-center gap-4 mb-6">
                     <div className="h-px flex-1 bg-slate-700/40"></div>
@@ -895,8 +435,6 @@ const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
                     <div className="h-px flex-1 bg-slate-700/40"></div>
                 </div>
 
-                {/* FNZ: recibe filtersWithoutVigencia — vigencia NO aplica aquí.
-                    Novedades se traduce en buildGlobalFilterPayload a { con_novedad: true/false } */}
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_fnz" titulo="Detalles de registros FNZ"
@@ -905,9 +443,6 @@ const Comercial = ({ apiClient, jobId, selectedFilters, isActive }) => {
                     globalFilters={filtersWithoutVigencia}
                     isActive={isActive}
                 />
-
-                {/* Retanqueos y Cosechas reciben selectedFilters COMPLETO (con vigencia).
-                    Novedades también se traduce en buildGlobalFilterPayload. */}
                 <TablaComercialRemota 
                     apiClient={apiClient} jobId={jobId}
                     origen="comercial_retanqueos" titulo="Clientes potenciales para Retanqueos"

@@ -3,9 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthenticatedLayout from '../layouts/AuthenticatedLayout';
 import { useAuth } from '../context/AuthContext'; 
+import { dashboardService } from '../services/dashboardService'; // Importamos el servicio
 import { 
-    ChevronRightIcon, ChartBarIcon, DocumentTextIcon,
-    ArrowTopRightOnSquareIcon 
+    ChevronRightIcon, 
+    ChartBarIcon, 
+    DocumentTextIcon 
 } from '@heroicons/react/24/outline'; 
 import { motion } from 'framer-motion'; 
 
@@ -16,27 +18,39 @@ import { HelpSsoButton } from "../components/sso/HelpSsoButton";
 const PRIMARY_COLOR_CLASS = 'text-[rgb(5,25,49)]'; 
 const BG_PRIMARY_DARK = 'bg-[rgb(5,25,49)]';
 
-const getBaseUrl = (apiClient) => apiClient.defaults.baseURL ? apiClient.defaults.baseURL.replace('/api', '') : (import.meta.env.VITE_API_URL || 'http://localhost:8000/api').replace('/api', '');
-
 export default function Dashboard() {
-    const { apiClient, user } = useAuth();
+    // 1. Extraemos SOLO el usuario del contexto. La vista no necesita saber de apiClient.
+    const { user } = useAuth(); 
     const navigate = useNavigate();
+    
     const [loading, setLoading] = useState(true);
+    const [newsData, setNewsData] = useState(null); // Guardamos la data si a futuro la muestras
 
+    // 2. Efecto para cargar los datos usando el SERVICIO, no Axios directamente
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
-                await apiClient.get('/news');
+                // Delegamos la responsabilidad de la red a la capa de servicios
+                const data = await dashboardService.getNews();
+                setNewsData(data);
             } catch (error) {
-                console.error(error);
+                // Aquí podrías manejar un estado de error si lo deseas
+                console.warn("No se pudieron cargar las noticias del dashboard");
             } finally {
                 setLoading(false);
             }
         };
         fetchDashboardData();
-    }, [apiClient]);
+    }, []);
 
-    if (loading) return <div className="h-screen flex items-center justify-center font-bold text-blue-900 italic">Cargando dashboard empresarial...</div>;
+    // 3. Renderizado de estado de carga
+    if (loading) {
+        return (
+            <div className="h-screen flex items-center justify-center font-bold text-blue-900 italic">
+                Cargando dashboard corporativo...
+            </div>
+        );
+    }
 
     const actionButtonStyle = `w-full h-[72px] flex items-center justify-between px-6 ${BG_PRIMARY_DARK} hover:bg-opacity-90 text-white rounded-2xl transition-all shadow-md group border border-transparent`;
 
@@ -79,7 +93,7 @@ export default function Dashboard() {
                                             <div className="bg-white/10 p-2 rounded-xl">
                                                 <ChartBarIcon className="w-6 h-6 text-white" />
                                             </div>
-                                            <span className="font-bold text-lg tracking-tight"> Gestión Cartera</span>
+                                            <span className="font-bold text-lg tracking-tight">Gestión Cartera</span>
                                         </div>
                                         <ChevronRightIcon className="w-5 h-5 text-white/50 group-hover:text-white transition-colors" />
                                     </button>
@@ -92,7 +106,7 @@ export default function Dashboard() {
                                             <div className="bg-white/10 p-2 rounded-xl">
                                                 <DocumentTextIcon className="w-6 h-6 text-white" />
                                             </div>
-                                            <span className="font-bold text-lg tracking-tight">Carga datacrédito</span>
+                                            <span className="font-bold text-lg tracking-tight">Carga Datacrédito</span>
                                         </div>
                                         <ChevronRightIcon className="w-5 h-5 text-white/50 group-hover:text-white transition-colors" />
                                     </button>
