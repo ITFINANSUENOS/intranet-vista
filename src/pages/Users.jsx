@@ -6,7 +6,7 @@ import {
     PencilIcon, TrashIcon, PlusIcon, XMarkIcon, 
     MagnifyingGlassIcon, FunnelIcon, ArrowPathIcon, 
     InformationCircleIcon, UserGroupIcon, MapPinIcon, BriefcaseIcon,
-    IdentificationIcon
+    IdentificationIcon, BuildingOfficeIcon  // ✅ BuildingOfficeIcon AÑADIDO
 } from '@heroicons/react/24/outline'; 
 
 const PRIMARY_COLOR = 'rgba(5, 25, 49)'; 
@@ -28,7 +28,7 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions = {}
     );
 
     const [formData, setFormData] = useState({
-        cedula: userToEdit?.number_document || '', // <-- CÉDULA AÑADIDA AQUÍ
+        cedula: userToEdit?.number_document || '',
         name_user: userToEdit?.name_user || '', 
         last_name_user: userToEdit?.last_name_user || '',
         email: userToEdit?.email || '', 
@@ -117,13 +117,12 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions = {}
                             </h3>
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* <-- INPUT DE CÉDULA AÑADIDO --> */}
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cédula *</label>
                                     <input type="text" name="number_document" value={formData.number_document} onChange={handleChange} required className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm" placeholder="Ej. 1023456789" />
                                     {formErrors.number_document && <p className="text-red-500 text-xs mt-1 font-medium">{formErrors.number_document[0]}</p>}
                                 </div>
-                                <div className="hidden md:block"></div> {/* Espaciador */}
+                                <div className="hidden md:block"></div>
 
                                 <div>
                                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nombres *</label>
@@ -217,37 +216,52 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions = {}
 };
 
 // ===============================================
-// 2. MODAL DE DETALLES (Rediseñado y estético)
+// 2. MODAL DE DETALLES
+// ===============================================
+// ===============================================
+// 2. MODAL DE DETALLES
 // ===============================================
 const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, getRegionalName, getPositionName, getCostCenterCode }) => {
     if (!isOpen || !user) return null;
+
+    // Función para capitalizar correctamente el nombre
+    const formatName = (name) => {
+        if (!name) return '';
+        return name.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+    };
+
+    const fullName = formatName(`${user.name_user} ${user.last_name_user}`);
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden relative">
                 
-                {/* Cabecera Estética */}
-                <div className="h-28 bg-gradient-to-r from-[#041830] to-blue-900 relative">
+                {/* Cabecera Estética - Gradiente profesional */}
+                <div 
+                    className="h-32 w-full relative"
+                    style={{ background: 'linear-gradient(135deg, rgba(4,24,48,1) 0%, rgba(15,39,70,1) 100%)' }}
+                >
                     <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur transition-colors">
                         <XMarkIcon className="w-5 h-5" />
                     </button>
                     
                     {/* Avatar superpuesto */}
                     <div className="absolute -bottom-10 left-8">
-                        <div className="w-20 h-20 bg-white rounded-full p-1 shadow-md border border-slate-100">
+                        <div className="w-24 h-24 bg-white rounded-full shadow-md border-4 border-white flex items-center justify-center">
                             <div className="w-full h-full bg-slate-50 rounded-full flex items-center justify-center">
-                                <UserGroupIcon className="w-8 h-8 text-slate-300" />
+                                <UserGroupIcon className="w-10 h-10 text-slate-300" />
                             </div>
                         </div>
                     </div>
                 </div>
                 
-                <div className="px-8 pb-8 pt-14">
-                    <div className="mb-6">
+                {/* Cuerpo del Modal */}
+                <div className="px-8 pb-8 pt-16">
+                    <div className="mb-8 flex flex-wrap items-center gap-4">
                         <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
-                            {user.name_user} {user.last_name_user}
+                            {fullName}
                         </h2>
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 mt-2 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100 uppercase tracking-wider">
                             <BriefcaseIcon className="w-3.5 h-3.5" />
                             {getRoleName(user)}
                         </span>
@@ -255,38 +269,38 @@ const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, 
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* Tarjeta de Información Personal */}
-                        <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-100">
-                            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-4 border-b border-slate-200 pb-2 flex items-center gap-2">
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest mb-5 pb-2 border-b border-slate-200 flex items-center gap-2">
                                 <IdentificationIcon className="w-4 h-4 text-slate-400" />
                                 Datos Personales
                             </h3>
                             <div className="space-y-4">
                                 <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cédula</p>
-                                    <p className="text-slate-800 font-semibold text-sm">{user.number_document || 'No registrada'}</p>
+                                    <p className="text-slate-900 font-medium text-base">{user.number_document || 'No registrada'}</p>
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Correo Electrónico</p>
-                                    <p className="text-slate-800 font-semibold text-sm break-all">{user.email}</p>
+                                    <p className="text-slate-900 font-medium text-base break-all">{user.email}</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Tarjeta de Información Corporativa */}
-                        <div className="bg-slate-50/80 p-5 rounded-2xl border border-slate-100">
-                            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest mb-4 border-b border-slate-200 pb-2 flex items-center gap-2">
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+                            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest mb-5 pb-2 border-b border-slate-200 flex items-center gap-2">
                                 <BuildingOfficeIcon className="w-4 h-4 text-slate-400" />
                                 Datos Corporativos
                             </h3>
                             <div className="space-y-4">
                                 <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Compañía / Regional</p>
-                                    <p className="text-slate-800 font-semibold text-sm">{getCompanyName(user)} — {getRegionalName(user)}</p>
+                                    <p className="text-slate-900 font-medium text-base">{getCompanyName(user)} — {getRegionalName(user)}</p>
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Cargo y C. Costo</p>
-                                    <p className="text-slate-800 font-semibold text-sm">{getPositionName(user)}</p>
-                                    <p className="text-slate-500 font-medium text-xs mt-1">CC: {getCostCenterCode(user)}</p>
+                                    <p className="text-slate-900 font-medium text-base">{getPositionName(user)}</p>
+                                    <p className="text-slate-500 font-medium text-sm mt-0.5">CC: {getCostCenterCode(user)}</p>
                                 </div>
                             </div>
                         </div>
@@ -354,9 +368,6 @@ export default function Users() {
         fetchUsers(null);
     };
 
-    // =========================================================================
-    // EXTRACCIÓN DE DATOS A PRUEBA DE FALLOS (Resuelve el Type Mismatch)
-    // =========================================================================
     const getRoleName = (u) => {
         if (u.roles && u.roles[0]?.name) return u.roles[0].name;
         if (u.role_name) return u.role_name;
@@ -417,7 +428,7 @@ export default function Users() {
 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     
-                    {/* Filtros - INTACTOS DE TU CÓDIGO ORIGINAL */}
+                    {/* Filtros */}
                     <div className="p-5 border-b border-slate-100 bg-slate-50/50">
                         <form onSubmit={handleSearch} className="flex flex-col gap-4">
                             <div className="flex flex-col md:flex-row gap-4 w-full">
@@ -488,7 +499,6 @@ export default function Users() {
                             <table className="w-full text-left text-sm whitespace-nowrap">
                                 <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 uppercase text-xs font-extrabold tracking-wider">
                                     <tr>
-                                        {/* CABECERAS MODIFICADAS: Se quitaron Compañía y Centro de Costo */}
                                         <th className="px-6 py-4">Usuario</th>
                                         <th className="px-6 py-4">Contacto</th>
                                         <th className="px-6 py-4">Rol</th>
@@ -513,7 +523,6 @@ export default function Users() {
                                                     {getRoleName(u)}
                                                 </span>
                                             </td>
-                                            {/* CELDAS MODIFICADAS: Se quitaron Compañía y Centro de Costo */}
                                             <td className="px-6 py-4">
                                                 <p className="text-slate-600 font-medium text-xs truncate max-w-[120px]">
                                                     {getRegionalName(u)}
