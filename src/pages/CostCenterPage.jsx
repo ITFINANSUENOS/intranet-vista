@@ -1,258 +1,294 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/pages/CostCenterPage.jsx
+import React from 'react';
 import AuthenticatedLayout from '../layouts/AuthenticatedLayout';
-import { useAuth } from '../context/AuthContext';
-import { FaPlus, FaEdit, FaTrash, FaSpinner, FaMapMarkerAlt, FaHashtag } from 'react-icons/fa';
+import { useCostCenter } from '../hooks/useCostCenter';
+import { FaPlus, FaEdit, FaTrash, FaSpinner, FaMapMarkerAlt, FaHashtag, FaSearch } from 'react-icons/fa';
 
 // ===============================================
-// CLASES DE ESTILO
+// PALETA CORPORATIVA PREMIUM: rgba(5,25,49)
 // ===============================================
-
-// Color principal: rgba(5, 25, 49)
-const ACCENT_COLOR_CLASS = 'text-[rgba(5,25,49)]'; 
-const ACCENT_BG_CLASS = 'bg-[rgba(5,25,49)]';
-const ACCENT_HOVER_BG_CLASS = 'hover:bg-gray-800'; 
-
-// Clase para errores llamativos: Rojo fuerte, texto blanco, sombra (para el error de la vista principal)
-const ERROR_CLASS_MAIN = 'p-4 font-bold text-white bg-red-700 rounded-lg shadow-xl border-2 border-red-800';
-// Clase para errores del modal (más discreto, pero aún visible)
-const ERROR_CLASS_MODAL = 'p-3 font-semibold text-red-800 bg-red-100 rounded-lg border border-red-300'; 
-
+const CORP_BG = 'bg-[rgba(5,25,49)]';
+const CORP_TEXT = 'text-[rgba(5,25,49)]';
+const CORP_HOVER_BG = 'hover:bg-[rgba(10,40,75)]'; // Un tono sutilmente más claro para interacción
+const CORP_FOCUS_RING = 'focus:ring-2 focus:ring-[rgba(5,25,49)]/30 focus:border-[rgba(5,25,49)]';
+const CORP_BADGE_BG = 'bg-[rgba(5,25,49)]/10';
+const CORP_BADGE_RING = 'ring-[rgba(5,25,49)]/20';
 
 export default function CostCenterPage() {
-    const { apiClient } = useAuth();
-    const [costCenters, setCostCenters] = useState([]);
-    const [regionals, setRegionals] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const {
+        costCenters, 
+        filteredCostCenters,
+        regionals, 
+        loading, 
+        error,
+        searchTerm,
+        setSearchTerm,
+        isModalOpen, 
+        isEditingMode, 
+        isSubmitting, 
+        modalError, 
+        formData,
+        handleInputChange, 
+        openCreateModal, 
+        openEditModal, 
+        closeModal, 
+        handleSave, 
+        handleDelete
+    } = useCostCenter();
 
-    // Estado del Modal
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    
-    // isEditingMode nos ayuda a saber si estamos editando, independientemente del valor del ID en el form
-    const [isEditingMode, setIsEditingMode] = useState(false); 
-    const [originalId, setOriginalId] = useState(null); // Guardamos el ID original para la URL del PUT
-
-    const [formData, setFormData] = useState({ 
-        id: '', 
-        cost_center_name: '', 
-        regional_id: '' 
-    });
-    
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [modalError, setModalError] = useState(null);
-
-    // --- Carga de Datos ---
-    const fetchCostCenters = useCallback(async () => {
-        setLoading(true);
-        try {
-            const response = await apiClient.get('/cost-centers');
-            setCostCenters(response.data);
-        } catch (err) {
-            console.error(err);
-            setError("Error al cargar datos.");
-        } finally {
-            setLoading(false);
-        }
-    }, [apiClient]);
-
-    const fetchRegionals = useCallback(async () => {
-        try {
-            const response = await apiClient.get('/regionals');
-            // Nota: Aquí se asume que la respuesta es un array de regionales, ajustar si es necesario (ej: response.data.data)
-            setRegionals(response.data); 
-        } catch (err) { 
-            console.error(err); 
-        }
-    }, [apiClient]);
-
-    useEffect(() => {
-        fetchCostCenters();
-        fetchRegionals();
-    }, [fetchCostCenters, fetchRegionals]);
-
-    // --- Handlers ---
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
-
-    const openCreateModal = () => {
-        setFormData({ id: '', cost_center_name: '', regional_id: '' });
-        setIsEditingMode(false);
-        setOriginalId(null);
-        setModalError(null);
-        setIsModalOpen(true);
-    };
-
-    const openEditModal = (center) => {
-        setFormData({
-            id: center.id,
-            cost_center_name: center.cost_center_name,
-            regional_id: center.regional_id
-        });
-        setIsEditingMode(true);
-        setOriginalId(center.id); // Guardamos el ID original para saber a cuál hacer update
-        setModalError(null);
-        setIsModalOpen(true);
-    };
-
-    const handleSave = async (e) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-        setModalError(null);
-
-        // Si estamos editando usamos el originalId para la ruta, si no, es post a la raíz
-        const url = isEditingMode ? `/cost-centers/${originalId}` : `/cost-centers`;
-        const method = isEditingMode ? 'put' : 'post';
-        
-        try {
-            await apiClient[method](url, formData);
-            setIsModalOpen(false);
-            fetchCostCenters();
-        } catch (err) {
-            const message = err.response?.data?.message || "Error al guardar.";
-            if (err.response?.data?.errors) {
-                // Muestra errores detallados (ej: ID duplicado)
-                const validationErrors = Object.values(err.response.data.errors).flat().join(' | ');
-                setModalError(`Errores de validación: ${validationErrors}`);
-            } else {
-                setModalError(message);
-            }
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleDelete = async (id) => {
-        if (!window.confirm("¿Eliminar este Centro de Costo?")) return;
-        try {
-            await apiClient.delete(`/cost-centers/${id}`);
-            fetchCostCenters();
-        } catch (err) { alert("Error al eliminar."); }
-    };
-
-    // --- Render ---
-    if (loading && costCenters.length === 0) return <div className="p-8"><FaSpinner className="animate-spin" /> Cargando...</div>;
+    if (loading && costCenters.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                <FaSpinner className={`animate-spin text-4xl ${CORP_TEXT} opacity-90`} />
+                <span className="mt-4 text-sm font-semibold text-slate-500 tracking-wide uppercase">Cargando información...</span>
+            </div>
+        );
+    }
 
     return (
         <AuthenticatedLayout title="Gestión de Centros de Costo">
-            <div className="p-8">
-                <div className="flex justify-end mb-6">
-                    {/* BOTÓN PRINCIPAL CON COLOR DE ACENTO */}
-                    <button 
-                        onClick={openCreateModal} 
-                        className={`${ACCENT_BG_CLASS} text-white px-4 py-2 rounded-lg shadow ${ACCENT_HOVER_BG_CLASS} flex items-center transition`}
-                    >
-                        <FaPlus className="mr-2" /> Nuevo Centro
-                    </button>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                
+                {/* CABECERA Y ACCIONES */}
+                <div className="sm:flex sm:items-center sm:justify-between mb-8">
+                    <div>
+                        <h1 className={`text-2xl font-extrabold ${CORP_TEXT} tracking-tight`}>Centros de Costo</h1>
+                        
+                    </div>
+                    
+                    <div className="mt-4 sm:mt-0 flex flex-col sm:flex-row gap-4 items-center">
+                        {/* BARRA DE BÚSQUEDA */}
+                        <div className="relative w-full sm:w-80">
+                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                <FaSearch className="text-slate-400" />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Buscar por centro o regional..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className={`block w-full rounded-lg border-0 py-2.5 pl-10 pr-3 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 sm:text-sm sm:leading-6 transition-all ${CORP_FOCUS_RING} shadow-sm`}
+                            />
+                        </div>
+
+                        {/* BOTÓN CREAR */}
+                        <button 
+                            onClick={openCreateModal} 
+                            className={`${CORP_BG} text-white w-full sm:w-auto px-5 py-2.5 rounded-lg shadow-md ${CORP_HOVER_BG} flex items-center justify-center text-sm font-semibold transition-all duration-200 active:scale-95 hover:shadow-lg`}
+                        >
+                            <FaPlus className="mr-2.5 text-xs opacity-90" /> 
+                            Nuevo Centro
+                        </button>
+                    </div>
                 </div>
 
-                {/* MENSAJE DE ERROR LLAMATIVO EN LA VISTA PRINCIPAL */}
-                {error && <div className={ERROR_CLASS_MAIN}>🚨 {error}</div>}
+                {/* ALERTAS DE ERROR GLOBALES */}
+                {error && (
+                    <div className="mb-6 rounded-lg bg-red-50 p-4 border border-red-200 shadow-sm animate-fade-in">
+                        <div className="flex">
+                            <div className="flex-shrink-0 text-red-400">🚨</div>
+                            <div className="ml-3">
+                                <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 
-                <div className="bg-white shadow rounded-lg overflow-hidden border border-gray-200">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                {/* ENCABEZADOS DE TABLA CON COLOR DE ACENTO */}
-                                <th className={`px-6 py-3 text-left text-xs font-medium ${ACCENT_COLOR_CLASS} uppercase`}>ID / Código</th>
-                                <th className={`px-6 py-3 text-left text-xs font-medium ${ACCENT_COLOR_CLASS} uppercase`}>Nombre</th>
-                                <th className={`px-6 py-3 text-left text-xs font-medium ${ACCENT_COLOR_CLASS} uppercase`}>Regional</th>
-                                <th className={`px-6 py-3 text-left text-xs font-medium ${ACCENT_COLOR_CLASS} uppercase`}>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {costCenters.map((center) => (
-                                <tr key={center.id} className="hover:bg-gray-50 transition">
-                                    <td className="px-6 py-4 font-bold text-gray-900">{center.id}</td>
-                                    <td className="px-6 py-4 text-gray-700">{center.cost_center_name}</td>
-                                    <td className="px-6 py-4 text-gray-700">{center.regional?.name_regional || 'N/A'}</td>
-                                    <td className="px-6 py-4 flex gap-3">
-                                        {/* BOTONES DE ACCIÓN (Mantenemos índigo/rojo por contraste sobre fondo blanco) */}
-                                        <button onClick={() => openEditModal(center)} className="text-indigo-600 hover:text-indigo-900 transition"><FaEdit /></button>
-                                        <button onClick={() => handleDelete(center.id)} className="text-red-600 hover:text-red-900 transition"><FaTrash /></button>
-                                    </td>
+                {/* CONTENEDOR PRINCIPAL DE LA TABLA */}
+                <div className="bg-white shadow-sm ring-1 ring-slate-200 sm:rounded-xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-slate-200">
+                            <thead className="bg-slate-50/80">
+                                <tr>
+                                    <th scope="col" className={`px-6 py-4 text-left text-xs font-bold ${CORP_TEXT} uppercase tracking-wider`}>
+                                        Código
+                                    </th>
+                                    <th scope="col" className={`px-6 py-4 text-left text-xs font-bold ${CORP_TEXT} uppercase tracking-wider`}>
+                                        Nombre del Centro
+                                    </th>
+                                    <th scope="col" className={`px-6 py-4 text-left text-xs font-bold ${CORP_TEXT} uppercase tracking-wider`}>
+                                        Regional Asociada
+                                    </th>
+                                    <th scope="col" className={`px-6 py-4 text-center text-xs font-bold ${CORP_TEXT} uppercase tracking-wider relative`}>
+                                        <span className="sr-only">Acciones</span>
+                                        Acciones
+                                    </th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-slate-200">
+                                {filteredCostCenters.map((center) => (
+                                    <tr key={center.id} className="hover:bg-slate-50/70 transition-colors duration-150 group">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className="text-sm font-bold text-slate-900">{center.id}</span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <span className="text-sm text-slate-700 font-medium">{center.cost_center_name}</span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {center.regional?.name_regional ? (
+                                                <span className={`inline-flex items-center rounded-md ${CORP_BADGE_BG} px-2.5 py-1 text-xs font-bold ${CORP_TEXT} ring-1 ring-inset ${CORP_BADGE_RING}`}>
+                                                    {center.regional.name_regional}
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-inset ring-slate-500/10">
+                                                    Sin asignar
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <div className="flex justify-center items-center gap-2 opacity-80 group-hover:opacity-100 transition-opacity">
+                                                <button 
+                                                    onClick={() => openEditModal(center)} 
+                                                    className={`p-2 text-slate-400 hover:${CORP_TEXT} hover:${CORP_BADGE_BG} rounded-full transition-all duration-200`}
+                                                    title="Editar"
+                                                >
+                                                    <FaEdit size={16} />
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDelete(center.id)} 
+                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-all duration-200"
+                                                    title="Eliminar"
+                                                >
+                                                    <FaTrash size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                
+                                {/* ESTADOS VACÍOS */}
+                                {filteredCostCenters.length === 0 && !loading && (
+                                    <tr>
+                                        <td colSpan="4" className="px-6 py-12 text-center text-slate-500 text-sm font-medium">
+                                            {searchTerm 
+                                                ? `No se encontraron resultados para "${searchTerm}"` 
+                                                : "No se encontraron centros de costo registrados."}
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
-            {/* MODAL */}
+            {/* MODAL CORPORATIVO */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex justify-center items-center z-50">
-                    <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
-                        {/* TÍTULO DEL MODAL CON COLOR DE ACENTO */}
-                        <h3 className={`text-xl font-semibold mb-4 border-b pb-2 ${ACCENT_COLOR_CLASS}`}>
-                            {isEditingMode ? 'Editar Centro de Costo' : 'Crear Nuevo Centro'}
-                        </h3>
-                        
-                        {/* MENSAJE DE ERROR LLAMATIVO EN EL MODAL */}
-                        {modalError && <div className={ERROR_CLASS_MODAL}>{modalError}</div>}
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    {/* Fondo oscuro con desenfoque */}
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onClick={closeModal}></div>
 
-                        <form onSubmit={handleSave}>
-                            {/* CAMPO ID */}
-                            <div className="mb-4">
-                                <label className="block text-gray-700 text-sm font-bold mb-2">ID / Código</label>
-                                <div className="flex items-center border rounded shadow-sm">
-                                    <div className="pl-3 text-gray-500"><FaHashtag /></div>
-                                    <input
-                                        type="text" 
-                                        name="id"
-                                        value={formData.id}
-                                        onChange={handleInputChange}
-                                        disabled={isEditingMode} 
-                                        className={`w-full py-2 px-3 focus:outline-none ${isEditingMode ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
-                                        placeholder="Ej: 1050 o CC-01"
-                                        required
-                                    />
-                                </div>
-                                {isEditingMode && <p className="text-xs text-gray-500 mt-1">El ID no se puede modificar una vez creado.</p>}
-                            </div>
-
-                            <div className="mb-4">
-                                <label className="block text-gray-700 text-sm font-bold mb-2">Nombre</label>
-                                <input
-                                    type="text"
-                                    name="cost_center_name"
-                                    value={formData.cost_center_name}
-                                    onChange={handleInputChange}
-                                    className="shadow border rounded w-full py-2 px-3 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                    required
-                                />
-                            </div>
+                    <div className="flex min-h-full items-center justify-center p-4 text-center sm:p-0">
+                        {/* Contenedor del Modal */}
+                        <div className="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-lg ring-1 ring-slate-200">
                             
-                            <div className="mb-6">
-                                <label className="block text-gray-700 text-sm font-bold mb-2">Regional</label>
-                                <div className="flex items-center border rounded shadow-sm">
-                                    <div className="pl-3 text-gray-500"><FaMapMarkerAlt /></div>
-                                    <select
-                                        name="regional_id"
-                                        value={formData.regional_id}
-                                        onChange={handleInputChange}
-                                        className="w-full py-2 px-3 focus:outline-none bg-transparent"
-                                        required
-                                    >
-                                        <option value="">Selecciona una Regional...</option>
-                                        {regionals.map(r => (
-                                            <option key={r.id} value={r.id}>
-                                                {r.name_regional} - {r.ubication_regional}
-                                            </option>
-                                        ))}
-                                    </select>
+                            {/* Borde superior decorativo corporativo */}
+                            <div className={`h-2 w-full ${CORP_BG}`}></div>
+
+                            <div className="bg-white px-4 pb-4 pt-5 sm:p-8 sm:pb-6">
+                                <div className="sm:flex sm:items-start w-full">
+                                    <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                                        <h3 className={`text-xl font-bold leading-6 ${CORP_TEXT} mb-6 border-b border-slate-100 pb-4`}>
+                                            {isEditingMode ? 'Actualizar Información' : 'Registrar Nuevo Centro'}
+                                        </h3>
+                                        
+                                        {modalError && (
+                                            <div className="mb-5 rounded-md bg-red-50 p-3 text-sm text-red-700 border border-red-200 font-medium">
+                                                {modalError}
+                                            </div>
+                                        )}
+
+                                        <form onSubmit={handleSave} className="space-y-6">
+                                            {/* Input Código */}
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                                                    Código Identificador
+                                                </label>
+                                                <div className="relative rounded-md shadow-sm">
+                                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                                        <FaHashtag className="text-slate-400 sm:text-sm" />
+                                                    </div>
+                                                    <input
+                                                        type="text" 
+                                                        name="id"
+                                                        value={formData.id}
+                                                        onChange={handleInputChange}
+                                                        disabled={isEditingMode} 
+                                                        className={`block w-full rounded-md border-0 py-2.5 pl-10 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 sm:text-sm sm:leading-6 transition-all ${CORP_FOCUS_RING} ${isEditingMode ? 'bg-slate-50 text-slate-500 cursor-not-allowed' : ''}`}
+                                                        placeholder="Ej: 10101"
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Input Nombre */}
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                                                    Nombre Descriptivo
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    name="cost_center_name"
+                                                    value={formData.cost_center_name}
+                                                    onChange={handleInputChange}
+                                                    className={`block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 sm:text-sm sm:leading-6 transition-all shadow-sm ${CORP_FOCUS_RING}`}
+                                                    placeholder="Ej: Popayan principal"
+                                                    required
+                                                />
+                                            </div>
+                                            
+                                            {/* Select Regional */}
+                                            <div>
+                                                <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                                                    Ubicación / Regional
+                                                </label>
+                                                <div className="relative rounded-md shadow-sm">
+                                                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                                        <FaMapMarkerAlt className="text-slate-400 sm:text-sm" />
+                                                    </div>
+                                                    <select
+                                                        name="regional_id"
+                                                        value={formData.regional_id}
+                                                        onChange={handleInputChange}
+                                                        className={`block w-full rounded-md border-0 py-2.5 pl-10 pr-10 text-slate-900 ring-1 ring-inset ring-slate-300 sm:text-sm sm:leading-6 transition-all bg-white shadow-sm cursor-pointer ${CORP_FOCUS_RING}`}
+                                                        required
+                                                    >
+                                                        <option value="" disabled className="text-slate-500">Seleccione una regional...</option>
+                                                        {regionals.map(r => (
+                                                            <option key={r.id} value={r.id}>
+                                                                {r.name_regional} {r.ubication_regional ? `(${r.ubication_regional})` : ''}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Acciones del Modal */}
+                                            <div className="mt-8 pt-5 border-t border-slate-100 sm:flex sm:flex-row-reverse">
+                                                <button 
+                                                    type="submit" 
+                                                    disabled={isSubmitting} 
+                                                    className={`inline-flex w-full justify-center rounded-lg ${CORP_BG} px-5 py-2.5 text-sm font-bold text-white shadow-md ${CORP_HOVER_BG} sm:ml-3 sm:w-auto transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed`}
+                                                >
+                                                    {isSubmitting ? (
+                                                        <><FaSpinner className="animate-spin mr-2 mt-0.5" /> Procesando...</>
+                                                    ) : (
+                                                        isEditingMode ? 'Guardar Cambios' : 'Crear Registro'
+                                                    )}
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={closeModal} 
+                                                    className="mt-3 inline-flex w-full justify-center rounded-lg bg-white px-5 py-2.5 text-sm font-bold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 sm:mt-0 sm:w-auto transition-all"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
                                 </div>
                             </div>
-
-                            <div className="flex justify-end gap-3">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">Cancelar</button>
-                                {/* BOTÓN DE GUARDAR CON COLOR DE ACENTO */}
-                                <button type="submit" disabled={isSubmitting} className={`${ACCENT_BG_CLASS} text-white px-4 py-2 rounded ${ACCENT_HOVER_BG_CLASS} flex items-center transition`}>
-                                    {isSubmitting && <FaSpinner className="animate-spin mr-2" />}
-                                    {isEditingMode ? 'Actualizar' : 'Guardar'}
-                                </button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}

@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import AuthenticatedLayout from '../layouts/AuthenticatedLayout';
 import { useAuth } from '../context/AuthContext';
-import { useUsers } from '../hooks/useUsers'; 
+import { useUsers } from '../hooks/useUsers';
 import { 
     PencilIcon, TrashIcon, PlusIcon, XMarkIcon, 
     MagnifyingGlassIcon, FunnelIcon, ArrowPathIcon, 
     InformationCircleIcon, UserGroupIcon, MapPinIcon, BriefcaseIcon,
-    IdentificationIcon, BuildingOfficeIcon  // ✅ BuildingOfficeIcon AÑADIDO
-} from '@heroicons/react/24/outline'; 
+    IdentificationIcon, BuildingOfficeIcon
+} from '@heroicons/react/24/outline';
 
-const PRIMARY_COLOR = 'rgba(5, 25, 49)'; 
+const PRIMARY_COLOR = 'rgba(5, 25, 49)';
 const ERROR_CLASS_MODAL = 'p-3 font-semibold text-red-800 bg-red-50 rounded-lg border border-red-200 flex items-center gap-2'; 
 
 // ===============================================

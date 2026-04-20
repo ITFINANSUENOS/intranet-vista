@@ -1,68 +1,40 @@
-import React, { useEffect, useState, useCallback } from 'react';
+// src/pages/Companies.jsx
+import React, { useState, useEffect } from 'react';
 import AuthenticatedLayout from '../layouts/AuthenticatedLayout';
-import { useAuth } from '../context/AuthContext';
 import { PencilIcon, TrashIcon, PlusIcon, XMarkIcon, BuildingOfficeIcon } from '@heroicons/react/24/outline';
+import { useCompanies } from '../hooks/useCompanies'; // Importamos nuestro hook
 
-// Estilos basados en el color solicitado
 const PRIMARY_COLOR_CLASS = 'bg-[rgba(5,25,49)]'; 
 const PRIMARY_TEXT_COLOR_CLASS = 'text-[rgba(5,25,49)]';
 
 // ===============================================
 // 1. COMPONENTE MODAL DE FORMULARIO PARA EMPRESAS
 // ===============================================
-const CompanyFormModal = ({ isOpen, onClose, companyToEdit, onSave }) => {
-    if (!isOpen) return null;
-
-    const isEditing = !!companyToEdit;
-    
+const CompanyFormModal = ({ isOpen, onClose, companyToEdit, onSave, loading, error }) => {
     const [formData, setFormData] = useState({
-        name_company: companyToEdit?.name_company || '',
-        ubication: companyToEdit?.ubication || '',
+        name_company: '',
+        ubication: '',
     });
-    
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const { apiClient } = useAuth();
 
     useEffect(() => {
         setFormData({
             name_company: companyToEdit?.name_company || '',
             ubication: companyToEdit?.ubication || '',
         });
-        setError(null);
     }, [companyToEdit, isOpen]);
+
+    if (!isOpen) return null;
+
+    const isEditing = !!companyToEdit;
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = (e) => {
         e.preventDefault();
-        setError(null);
-        setLoading(true);
-
-        try {
-            const dataToSend = {
-                name_company: formData.name_company.trim(),
-                ubication: formData.ubication.trim()
-            };
-
-            const url = isEditing ? `/companies/${companyToEdit.id}` : '/companies';
-            const method = isEditing ? apiClient.put : apiClient.post;
-            
-            const response = await method(url, dataToSend);
-            
-            // El controlador devuelve el objeto directamente o dentro de 'data'
-            onSave(response.data.data || response.data);
-            onClose();
-
-        } catch (err) {
-            console.error("Error al guardar empresa:", err.response?.data || err);
-            setError(err.response?.data?.message || "Error al procesar la solicitud.");
-        } finally {
-            setLoading(false);
-        }
+        onSave(formData);
     };
 
     return (
@@ -122,60 +94,21 @@ const CompanyFormModal = ({ isOpen, onClose, companyToEdit, onSave }) => {
 // 2. COMPONENTE PRINCIPAL: Companies
 // ===============================================
 export default function Companies() {
-    const { apiClient } = useAuth();
-    const [companies, setCompanies] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingCompany, setEditingCompany] = useState(null);
-
-    const fetchCompanies = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            // El controlador usa: return response()->json(['data' => $companies]);
-            const response = await apiClient.get('/companies');
-            setCompanies(response.data.data || []); 
-        } catch (err) {
-            setError('No se pudieron cargar las empresas. Verifique la conexión con el servidor.');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    }, [apiClient]);
-
-    useEffect(() => {
-        fetchCompanies();
-    }, [fetchCompanies]);
-
-    const handleCreateClick = () => {
-        setEditingCompany(null);
-        setIsModalOpen(true);
-    };
-
-    const handleEditClick = (company) => {
-        setEditingCompany(company);
-        setIsModalOpen(true);
-    };
-
-    const handleSave = (savedCompany) => {
-        if (editingCompany) {
-            setCompanies(companies.map(c => c.id === savedCompany.id ? savedCompany : c));
-        } else {
-            setCompanies([savedCompany, ...companies]);
-        }
-    };
-    
-    const handleDeleteClick = async (id) => {
-        if (!window.confirm("¿Está seguro de eliminar esta empresa? Esta acción no se puede deshacer.")) return;
-
-        try {
-            await apiClient.delete(`/companies/${id}`);
-            setCompanies(companies.filter(c => c.id !== id));
-        } catch (err) {
-            alert('Error al intentar eliminar el registro.');
-        }
-    };
+    // Extraemos todo del hook en lugar de declarar estados localmente
+    const {
+        companies,
+        loading,
+        error,
+        isModalOpen,
+        editingCompany,
+        formLoading,
+        formError,
+        openCreateModal,
+        openEditModal,
+        closeModal,
+        saveCompany,
+        deleteCompany
+    } = useCompanies();
 
     return (
         <AuthenticatedLayout title="Gestión de Empresas">
@@ -189,7 +122,7 @@ export default function Companies() {
                 </div>
                 
                 <button 
-                    onClick={handleCreateClick}
+                    onClick={openCreateModal}
                     className={`flex items-center px-5 py-2.5 ${PRIMARY_COLOR_CLASS} text-white rounded-xl hover:shadow-lg transition-all transform hover:-translate-y-1 font-semibold`}
                 >
                     <PlusIcon className="w-5 h-5 mr-2" />
@@ -231,14 +164,14 @@ export default function Companies() {
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                                                 <div className="flex justify-end gap-3">
                                                     <button 
-                                                        onClick={() => handleEditClick(company)}
+                                                        onClick={() => openEditModal(company)}
                                                         className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
                                                         title="Editar"
                                                     >
                                                         <PencilIcon className="w-5 h-5" />
                                                     </button>
                                                     <button 
-                                                        onClick={() => handleDeleteClick(company.id)}
+                                                        onClick={() => deleteCompany(company.id)}
                                                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
                                                         title="Eliminar"
                                                     >
@@ -263,9 +196,11 @@ export default function Companies() {
             
             <CompanyFormModal 
                 isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
+                onClose={closeModal}
                 companyToEdit={editingCompany}
-                onSave={handleSave}
+                onSave={saveCompany}
+                loading={formLoading}
+                error={formError}
             />
         </AuthenticatedLayout>
     );
