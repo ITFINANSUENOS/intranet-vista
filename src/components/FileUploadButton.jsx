@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { RefreshCw, UploadCloud } from 'lucide-react';
-import { apiClient as defaultApiClient } from '../context/AuthContext';
+import { apiClient as defaultApiClient } from '../api/apiClient';
 
 const FileUploadButton = ({ 
     apiClient: propApiClient, 
