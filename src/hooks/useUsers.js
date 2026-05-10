@@ -18,7 +18,6 @@ export const useUsers = () => {
     const fetchUsers = useCallback(async (pageUrl = null) => {
         setLoading(true);
         try {
-            // Sincronización exacta con los $request->filled() del backend
             const params = { 
                 search: searchTerm, 
                 role_id: selectedRole, 
@@ -28,7 +27,16 @@ export const useUsers = () => {
                 position_id: selectedPosition 
             };
             
-            const endpoint = pageUrl ? pageUrl.replace(import.meta.env.VITE_API_URL || 'http://localhost:8000/api', '') : '/users';
+            // Refactorización: Limpiar cualquier protocolo (http/https) y dominio del backend
+            // Esto asegura que solo nos quedemos con la ruta /users... y Axios use la baseURL correcta
+            let endpoint = '/users';
+            if (pageUrl) {
+                const urlObj = new URL(pageUrl);
+                endpoint = urlObj.pathname + urlObj.search;
+                // Si tu API está en una subcarpeta como /api, quitamos el prefijo para que no se duplique
+                endpoint = endpoint.replace('/api', '');
+            }
+
             const responseData = await userService.getUsers(endpoint, params);
             
             setUsers(responseData.data || responseData); 
