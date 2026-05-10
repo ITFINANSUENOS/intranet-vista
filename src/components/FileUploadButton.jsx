@@ -1,14 +1,18 @@
 import React, { useState, useRef } from 'react';
 import { RefreshCw, UploadCloud } from 'lucide-react';
+import { apiClient as defaultApiClient } from '../context/AuthContext';
 
 const FileUploadButton = ({ 
-    apiClient, 
+    apiClient: propApiClient, 
     onUploadStart, 
     onUploadSuccess, 
     onUploadError,
     className = "",
     iconOnly = false
 }) => {
+    // Usamos el cliente pasado por prop o el global por defecto
+    const apiClient = propApiClient || defaultApiClient;
+    
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef(null);
 
