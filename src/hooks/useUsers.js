@@ -39,8 +39,22 @@ export const useUsers = () => {
 
             const responseData = await userService.getUsers(endpoint, params);
             
-            setUsers(responseData.data || responseData); 
-            setPagination(responseData);
+            // Si la respuesta viene de un UserResource::collection, los datos están en responseData.data
+            // y la paginación en responseData.meta
+            if (responseData.data && responseData.meta) {
+                setUsers(responseData.data);
+                setPagination({
+                    ...responseData.meta,
+                    links: responseData.links,
+                    // Mapeamos para mantener compatibilidad con el componente de UI
+                    prev_page_url: responseData.links.prev,
+                    next_page_url: responseData.links.next
+                });
+            } else {
+                // Formato antiguo (Paginador directo de Laravel)
+                setUsers(responseData.data || responseData); 
+                setPagination(responseData);
+            }
         } catch (error) {
             console.error("Error cargando usuarios:", error);
         } finally {
