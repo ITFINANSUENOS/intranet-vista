@@ -47,7 +47,25 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions = {}
 
     const optionsData = selectOptions?.data || selectOptions || {};
 
-    const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        
+        // Si cambia la regional, reseteamos el centro de costo para evitar errores de validación 422
+        if (name === 'regional_id') {
+            setFormData({ 
+                ...formData, 
+                regional_id: value, 
+                cost_center_id: '' 
+            });
+        } else {
+            setFormData({ ...formData, [name]: value });
+        }
+    };
+
+    // Filtrar los centros de costo según la regional seleccionada
+    const filteredCostCenters = (optionsData.cost_centers || []).filter(c => 
+        !formData.regional_id || String(c.regional_id) === String(formData.regional_id)
+    );
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -136,7 +154,7 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions = {}
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Correo Electrónico *</label>
-                                    <input type="email" name="email" value={formData.email} onChange={handleChange} required className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm" placeholder="ejemplo@empresa.com" />
+                                    <input type="email" name="email" value={formData.email} onChange={handleChange} required className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm placeholder-slate-400" placeholder="ejemplo@empresa.com" />
                                     {formErrors.email && <p className="text-red-500 text-xs mt-1 font-medium">{formErrors.email[0]}</p>}
                                 </div>
                             </div>
@@ -219,13 +237,9 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions = {}
 // ===============================================
 // 2. MODAL DE DETALLES
 // ===============================================
-// ===============================================
-// 2. MODAL DE DETALLES
-// ===============================================
 const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, getRegionalName, getPositionName, getCostCenterCode }) => {
     if (!isOpen || !user) return null;
 
-    // Función para capitalizar correctamente el nombre
     const formatName = (name) => {
         if (!name) return '';
         return name.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
@@ -236,8 +250,6 @@ const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden relative">
-                
-                {/* Cabecera Estética - Gradiente profesional */}
                 <div 
                     className="h-32 w-full relative"
                     style={{ background: 'linear-gradient(135deg, rgba(4,24,48,1) 0%, rgba(15,39,70,1) 100%)' }}
@@ -245,8 +257,6 @@ const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, 
                     <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 text-white rounded-full backdrop-blur transition-colors">
                         <XMarkIcon className="w-5 h-5" />
                     </button>
-                    
-                    {/* Avatar superpuesto */}
                     <div className="absolute -bottom-10 left-8">
                         <div className="w-24 h-24 bg-white rounded-full shadow-md border-4 border-white flex items-center justify-center">
                             <div className="w-full h-full bg-slate-50 rounded-full flex items-center justify-center">
@@ -256,7 +266,6 @@ const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, 
                     </div>
                 </div>
                 
-                {/* Cuerpo del Modal */}
                 <div className="px-8 pb-8 pt-16">
                     <div className="mb-8 flex flex-wrap items-center gap-4">
                         <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
@@ -269,7 +278,6 @@ const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, 
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Tarjeta de Información Personal */}
                         <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
                             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest mb-5 pb-2 border-b border-slate-200 flex items-center gap-2">
                                 <IdentificationIcon className="w-4 h-4 text-slate-400" />
@@ -287,7 +295,6 @@ const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, 
                             </div>
                         </div>
 
-                        {/* Tarjeta de Información Corporativa */}
                         <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
                             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-widest mb-5 pb-2 border-b border-slate-200 flex items-center gap-2">
                                 <BuildingOfficeIcon className="w-4 h-4 text-slate-400" />
@@ -316,8 +323,6 @@ const UserDetailsModal = ({ isOpen, onClose, user, getRoleName, getCompanyName, 
 // 3. VISTA PRINCIPAL (USERS)
 // ===============================================
 export default function Users() {
-    const { user } = useAuth(); 
-
     const { 
         users, pagination, selectOptions, 
         loading, optionsLoading,
@@ -404,8 +409,6 @@ export default function Users() {
     return (
         <AuthenticatedLayout title="Gestión de Usuarios">
             <div className="p-4 sm:p-8 max-w-[95%] mx-auto font-sans">
-                
-                {/* Cabecera */}
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
                         <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-3">
@@ -416,7 +419,6 @@ export default function Users() {
                         </h1>
                         <p className="text-slate-500 mt-2 font-medium">Administra los accesos y perfiles de la organización.</p>
                     </div>
-                    
                     <button 
                         onClick={openCreateModal}
                         className="flex items-center gap-2 px-5 py-3 text-white rounded-xl shadow-md hover:shadow-lg hover:opacity-90 transition-all active:scale-95 font-bold"
@@ -428,8 +430,6 @@ export default function Users() {
                 </div>
 
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    
-                    {/* Filtros */}
                     <div className="p-5 border-b border-slate-100 bg-slate-50/50">
                         <form onSubmit={handleSearch} className="flex flex-col gap-4">
                             <div className="flex flex-col md:flex-row gap-4 w-full">
@@ -456,30 +456,22 @@ export default function Users() {
                             </div>
                             
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="relative">
-                                    <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} className="w-full px-4 pr-8 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm font-medium appearance-none shadow-sm">
-                                        <option value="">Todos los Roles</option>
-                                        {(optionsData.roles || []).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="relative">
-                                    <select value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)} className="w-full px-4 pr-8 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm font-medium appearance-none shadow-sm">
-                                        <option value="">Todas las Compañías</option>
-                                        {(optionsData.companies || []).map(c => <option key={c.id} value={c.id}>{c.name_company}</option>)}
-                                    </select>
-                                </div>
-                                <div className="relative">
-                                    <select value={selectedRegional} onChange={(e) => setSelectedRegional(e.target.value)} className="w-full px-4 pr-8 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm font-medium appearance-none shadow-sm">
-                                        <option value="">Todas las Regionales</option>
-                                        {(optionsData.regionals || []).map(r => <option key={r.id} value={r.id}>{r.name_regional}</option>)}
-                                    </select>
-                                </div>
-                                <div className="relative">
-                                    <select value={selectedCostCenter} onChange={(e) => setSelectedCostCenter(e.target.value)} className="w-full px-4 pr-8 py-2 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm font-medium appearance-none shadow-sm">
-                                        <option value="">Todos los C. Costos</option>
-                                        {(optionsData.cost_centers || []).map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
-                                    </select>
-                                </div>
+                                <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium appearance-none shadow-sm">
+                                    <option value="">Todos los Roles</option>
+                                    {(optionsData.roles || []).map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                                </select>
+                                <select value={selectedCompany} onChange={(e) => setSelectedCompany(e.target.value)} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium appearance-none shadow-sm">
+                                    <option value="">Todas las Compañías</option>
+                                    {(optionsData.companies || []).map(c => <option key={c.id} value={c.id}>{c.name_company}</option>)}
+                                </select>
+                                <select value={selectedRegional} onChange={(e) => setSelectedRegional(e.target.value)} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium appearance-none shadow-sm">
+                                    <option value="">Todas las Regionales</option>
+                                    {(optionsData.regionals || []).map(r => <option key={r.id} value={r.id}>{r.name_regional}</option>)}
+                                </select>
+                                <select value={selectedCostCenter} onChange={(e) => setSelectedCostCenter(e.target.value)} className="w-full px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium appearance-none shadow-sm">
+                                    <option value="">Todos los C. Costos</option>
+                                    {(optionsData.cost_centers || []).map(c => <option key={c.id} value={c.id}>{c.id}</option>)}
+                                </select>
                             </div>
                         </form>
                     </div>
@@ -489,12 +481,6 @@ export default function Users() {
                             <div className="flex flex-col items-center justify-center p-20">
                                 <div className="animate-spin rounded-full h-10 w-10 border-4 border-slate-200 border-t-[rgba(5,25,49)] mb-4"></div>
                                 <p className="text-slate-500 font-medium">Cargando directorio...</p>
-                            </div>
-                        ) : safeUsers.length === 0 ? (
-                            <div className="text-center p-20">
-                                <UserGroupIcon className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-                                <h3 className="text-lg font-bold text-slate-700">No se encontraron usuarios</h3>
-                                <p className="text-slate-500 mt-1">Intenta ajustando los filtros de búsqueda.</p>
                             </div>
                         ) : (
                             <table className="w-full text-left text-sm whitespace-nowrap">
@@ -536,13 +522,13 @@ export default function Users() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center justify-center gap-1.5">
-                                                    <button onClick={() => setViewingUser(u)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Ver detalles">
+                                                    <button onClick={() => setViewingUser(u)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
                                                         <InformationCircleIcon className="w-5 h-5" />
                                                     </button>
-                                                    <button onClick={() => openEditModal(u)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all" title="Editar">
+                                                    <button onClick={() => openEditModal(u)} className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all">
                                                         <PencilIcon className="w-5 h-5" />
                                                     </button>
-                                                    <button onClick={() => handleDelete(u.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all" title="Eliminar">
+                                                    <button onClick={() => handleDelete(u.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
                                                         <TrashIcon className="w-5 h-5" />
                                                     </button>
                                                 </div>
@@ -552,33 +538,6 @@ export default function Users() {
                                 </tbody>
                             </table>
                         )}
-                    </div>
-
-                    <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <div className="text-sm font-medium text-slate-500">
-                            Mostrando <span className="font-bold text-slate-800">{safeUsers.length}</span> resultados
-                            {pagination?.total ? ` de ${pagination.total}` : ''}
-                        </div>
-                        
-                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-                            <button 
-                                disabled={!pagination?.prev_page_url} 
-                                onClick={() => fetchUsers(pagination.prev_page_url)} 
-                                className="px-3 py-1.5 border border-slate-200 rounded-lg bg-white disabled:opacity-40 hover:bg-slate-50 transition-colors"
-                            >
-                                Anterior
-                            </button>
-                            <div className="px-4 py-1.5 bg-white border border-slate-200 rounded-lg shadow-sm">
-                                Página {pagination?.current_page || 1} <span className="text-slate-300 mx-1">/</span> {pagination?.last_page || 1}
-                            </div>
-                            <button 
-                                disabled={!pagination?.next_page_url} 
-                                onClick={() => fetchUsers(pagination.next_page_url)} 
-                                className="px-3 py-1.5 border border-slate-200 rounded-lg bg-white disabled:opacity-40 hover:bg-slate-50 transition-colors"
-                            >
-                                Siguiente
-                            </button>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -593,18 +552,6 @@ export default function Users() {
             />
             
             <UserDetailsModal 
-                isOpen={!!viewingUser} 
-                onClose={() => setViewingUser(null)} 
-                user={viewingUser} 
-                getRoleName={getRoleName}
-                getCompanyName={getCompanyName}
-                getRegionalName={getRegionalName}
-                getPositionName={getPositionName}
-                getCostCenterCode={getCostCenterCode}
-            />
-        </AuthenticatedLayout>
-    );
-} 
                 isOpen={!!viewingUser} 
                 onClose={() => setViewingUser(null)} 
                 user={viewingUser} 
