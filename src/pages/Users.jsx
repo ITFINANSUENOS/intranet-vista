@@ -187,8 +187,9 @@ const UserFormModal = ({ isOpen, onClose, userToEdit, onSave, selectOptions = {}
                                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Centro de Costo *</label>
                                     <select name="cost_center_id" value={formData.cost_center_id} onChange={handleChange} required className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm appearance-none">
                                         <option value="">Seleccione centro de costo</option>
-                                        {(optionsData.cost_centers || []).map(c => <option key={c.id} value={c.id}>{c.id} - {c.cost_center_name}</option>)}
+                                        {filteredCostCenters.map(c => <option key={c.id} value={c.id}>{c.id} - {c.cost_center_name}</option>)}
                                     </select>
+                                    {formErrors.cost_center_id && <p className="text-red-500 text-xs mt-1 font-medium">{formErrors.cost_center_id[0]}</p>}
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-semibold text-slate-700 mb-1.5">Cargo *</label>
@@ -592,6 +593,18 @@ export default function Users() {
             />
             
             <UserDetailsModal 
+                isOpen={!!viewingUser} 
+                onClose={() => setViewingUser(null)} 
+                user={viewingUser} 
+                getRoleName={getRoleName}
+                getCompanyName={getCompanyName}
+                getRegionalName={getRegionalName}
+                getPositionName={getPositionName}
+                getCostCenterCode={getCostCenterCode}
+            />
+        </AuthenticatedLayout>
+    );
+} 
                 isOpen={!!viewingUser} 
                 onClose={() => setViewingUser(null)} 
                 user={viewingUser} 
