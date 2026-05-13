@@ -1,95 +1,70 @@
-# 🚀 Handover Técnico: Módulo SIC (Sistema Integral de Calidad)
+# 🚀 Handover Frontend: Módulo SIC (Sistema Integral de Calidad)
 
-Este documento contiene el contexto completo de la implementación del módulo SIC desarrollada en Mayo 2026. Úsalo para configurar el proyecto en un nuevo PC o para contextualizar a un nuevo desarrollador.
+Este documento detalla la implementación del Frontend (React) para el módulo SIC de la Intranet Arpesof. 
 
----
+## 1. Arquitectura de Interfaz y Navegación
 
-## 1. Arquitectura General
-- **Backend:** Laravel 10 (API REST).
-- **Frontend:** React + Vite + TailwindCSS.
-- **Almacenamiento:** AWS S3 usando **Pre-signed URLs** (Carga Directa desde Frontend al Bucket).
-- **Seguridad:** JWT + Spatie Permissions + Laravel Policies.
+### El Explorador Jerárquico Híbrido (`SicRepository.jsx`)
+Se diseñó un componente que simula un sistema de carpetas sin necesidad de que estas existan físicamente en la base de datos.
+La navegación utiliza una variable de estado `currentPath` que funciona como Breadcrumbs.
 
----
+**Estructura Acordada:**
+1. **DIRECCIÓN DEL SISTEMA (SGC)** -> Archivos en raíz + Subcarpeta (Perfiles).
+2. **PROCESOS** -> Grupos (Misionales, etc.) -> Procesos Reales (Ventas, etc.) -> Tipos de Documento (Procedimientos, Instructivos, etc.).
+3. **GESTIÓN DOCUMENTAL** -> Documentos obsoletos.
+4. **MANUAL DE USUARIO** -> Archivos directos.
 
-## 2. Configuración en un Nuevo PC
-
-### 2.1 Backend (Docker)
-1. Instalar el driver de AWS S3 en Laravel:
-   ```bash
-   composer require league/flysystem-aws-s3-v3 "^3.0"
-   ```
-2. Configurar `.env`:
-   ```env
-   AWS_ACCESS_KEY_ID=tu_access_key
-   AWS_SECRET_ACCESS_KEY=tu_secret_key
-   AWS_DEFAULT_REGION=us-east-1
-   AWS_BUCKET=arpesof-sic-local
-   ```
-   *(Nota: En desarrollo local, el sistema hace un Bypass de la carga de AWS simulando éxito, evitando errores de CORS).*
-3. Base de Datos:
-   ```bash
-   php artisan migrate
-   php artisan db:seed --class=SicPermissionsSeeder
-   ```
-
-### 2.2 Frontend (Docker)
-1. Instalar dependencias (Si no usas Docker, Node 20 LTS): `npm install`.
-2. Para que Vite detecte cambios en Docker sobre Windows, se usa `usePolling: true` en `vite.config.js`.
+> 💡 **Decisión UI:** 
+> La vista es "híbrida". Dependiendo de la ruta, el usuario puede ver la grilla de iconos de carpetas arriba y la tabla de documentos abajo simultáneamente (Ej: Entrar a un proceso muestra su Caracterización en la tabla y las carpetas de Procedimientos arriba).
 
 ---
 
-## 3. Base de Datos (Estructura)
+## 2. Modal Inteligente de Subida (`SicUploadModal.jsx`)
 
-- **`sic_processes`**: Áreas de la empresa (Ej: Contabilidad).
-  - Campos clave: `group_type` (ESTRATEGICO, MISIONAL, APOYO, EVALUACION).
-- **`sic_documents`**: Registro del documento. No existe tabla de carpetas; las carpetas son metadatos.
-  - `document_number`: Código oficial (`PR-CNT-001`). Es `NULL` cuando es Borrador (`draft`).
-  - `main_category`: Nivel raíz (`SGC`, `PROCESOS`, `GESTION`, `MANUAL_USUARIO`).
-  - `document_type`: Subcarpeta técnica (`PROC`, `INST`, `POL`, etc.).
-- **`sic_versions`**: Historial de archivos subidos. Permite tener v1.0 y v2.0 asociadas al mismo documento.
-- **`positions`**: Se añadió `sic_process_id` para saber a qué proceso pertenece el empleado.
+Para evitar errores humanos en la clasificación de documentos, el modal de carga es **Contextual**.
 
----
+### Mecanismos de Prevención de Errores:
+1. **Bloqueo de Raíz:** El botón "Nuevo Documento" está oculto en el `root` (Inicio). El usuario está obligado a navegar a una categoría o proceso antes de poder subir algo.
+2. **Auto-llenado (Inyección de Contexto):** Al pulsar "Nuevo Documento", el componente extrae el estado de navegación actual y lo pasa al Modal.
+3. **Campos Bloqueados:** El Modal toma el contexto e inhabilita (con clase `disabled:opacity-50`) los `select` de "Categoría Principal", "Proceso" y "Ubicación Interna". El usuario solo debe colocar el Título y seleccionar el archivo.
 
-## 4. Lógica de Negocio (Workflow)
-
-El ciclo de vida del documento está estrictamente definido:
-
-1. **Creación (Borrador):**
-   - El *Líder de Proceso* (`sic.crear`) sube un archivo.
-   - El Frontend pide URL firmada a S3 -> Frontend sube binario -> Frontend confirma a Backend.
-   - Estado: `draft` | Código: `null` (UI muestra "PENDIENTE").
-2. **Aprobación (Publicación):**
-   - El *Gerente de Calidad* (`sic.aprobar`) revisa el borrador.
-   - Pulsa "Publicar".
-   - Backend mueve el archivo de la ruta `/drafts/` a `/official/` en S3.
-   - Estado: `published` | Código: Generado correlativamente (Ej: `PR-CNT-001`).
-3. **Control de Versiones:**
-   - Si un documento está publicado, aparece el botón "Nueva Versión".
-   - Al subir nueva versión, el documento pasa a estado `under_review` (dejando de ser visible para el resto).
-   - Calidad debe "Publicar" nuevamente para que la nueva versión sea oficial.
+### Flujo de Subida (3 Actos):
+1. Pide la URL firmada de S3 (`requestUpload`).
+2. Sube el archivo directo a Amazon con `axios.put(upload_url)`. **(En Localhost hay un Bypass que simula el éxito para no tener errores CORS por llaves falsas).**
+3. Confirma la creación en el Backend (`confirmUpload`).
 
 ---
 
-## 5. Sistema de Permisos y Visibilidad
+## 3. Lógica de Estados Visuales
 
-La visualización del Explorador en `SicRepository.jsx` depende de:
+La tabla renderiza indicadores dinámicos basados en la respuesta del Backend:
+- **`PENDIENTE`:** Si el backend envía el `document_number` como null, el Front renderiza "PENDIENTE" en azul.
+- **Etiquetas de Estado:** 
+  - `published`: Badge verde "Vigente".
+  - `under_review`: Badge naranja "En Revisión".
+  - `draft`: Badge gris "Borrador".
+- **Botones Dinámicos (Protegidos):**
+  - **Publicar:** Solo se muestra a usuarios con permiso `sic.aprobar` o rol `Super_usuario` si el estado es draft o review.
+  - **Nueva Versión:** Solo aparece si el documento está `published`. Al pulsar, abre el modal en modo `isVersionMode = true`, bloqueando el título y exigiendo un "Resumen de Cambios".
 
-- **Super Usuario / Gerente de Calidad:** Ven TODO (borradores, en revisión y publicados de todas las áreas).
-- **Usuario Normal (Analista):** 
-  - Solo ve documentos en estado `published`.
-  - Solo ve documentos cuyo `sic_process_id` coincida con su Área.
-  - *Excepción:* Todos los usuarios pueden ver la categoría "4. Manual de Usuario" si está publicado.
-  - *Excepción:* Los usuarios pueden ver los borradores que ellos mismos han creado (Trazabilidad de sus aportes).
+---
+
+## 4. Integración en el Proyecto
+
+### Servicios y Hooks
+- `src/services/sicService.js`: Contiene todas las llamadas Axios al Backend SIC. Incluye un Bypass de Desarrollo para la subida a S3 si detecta la palabra `tu_access_key`.
+- `src/hooks/useSic.js`: Hook para manejar el `loading`, `error`, y el estado global de `documents`. Contiene la función para abrir las URLs de descarga generadas por S3.
+
+### Rutas (`App.jsx`)
+- La vista principal se renderiza en `/sic/repositorio`.
+- Protegida mediante el componente existente: `<PermissionGuard permission="sic.ver.propio">`.
+
+### Sidebar (`Sidebar.jsx`)
+- Se agregó el botón "Calidad (SIC)" en el menú lateral utilizando el icono `DocumentDuplicateIcon`.
+- Visibilidad controlada mediante: `canAccess(user, 'sic.ver.propio')`.
 
 ---
 
-## 6. Estado Actual del Frontend (Explorador)
-
-- Componente: `SicRepository.jsx`.
-- Se usa una vista de **Explorador Jerárquico** (Breadcrumbs y Grid de Carpetas).
-- **Botón "Nuevo Documento":** Es *Contextual*. Se oculta en el directorio raíz. Al usarlo dentro de una carpeta (Ej: Procedimientos de Talento Humano), el Modal (`SicUploadModal.jsx`) bloquea los selectores y hereda la ruta exacta de navegación para evitar que el usuario se equivoque de clasificación.
-
----
-*Hecho por: Gemini (Senior Architect) - Maya 2026*
+## 5. Entorno Local y Docker
+1. **Hot Reload en Windows:** Se modificó `vite.config.js` añadiendo `server: { watch: { usePolling: true } }` para que Docker detecte los cambios de archivo de inmediato.
+2. **CORS Testing:** Si pruebas S3 en local con credenciales reales, asegúrate de configurar la regla CORS en el Bucket de AWS permitiendo el origen `http://localhost:5173`.
