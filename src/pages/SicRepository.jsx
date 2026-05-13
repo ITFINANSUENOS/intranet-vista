@@ -71,7 +71,7 @@ const SicRepository = () => {
                 return doc.main_category === currentFolder.id && !doc.document_type;
             }
             if (currentFolder.level === 'file_list') {
-                const matchProcess = Number(doc.sic_process_id) === Number(currentFolder.process_id);
+                const matchProcess = Number(currentFolder.process_id) === 0 || Number(doc.sic_process_id) === Number(currentFolder.process_id);
                 const matchType = doc.document_type === currentFolder.id;
                 return matchProcess && matchType;
             }
