@@ -19,6 +19,7 @@ import NewsView from './pages/NewsView';
 import DatacreditoProcessingPage from './pages/analisis_datos/DatacreditoProcessingPage';
 import CostCenterPage from './pages/CostCenterPage';
 import Herramientas from './pages/Herramientas';
+import SicRepository from './pages/SicRepository';
 
 // IMPORTANTE: Estos componentes usan llaves { } porque se exportan como const, no default
 import { InventorySsoButton } from './components/sso/InventorySsoButton'; 
@@ -80,6 +81,10 @@ function App() {
               } />
               <Route path="/news" element={
                 <PermissionGuard permission="view_news"><NewsView /></PermissionGuard>
+              } />
+
+              <Route path="/sic/repositorio" element={
+                <PermissionGuard permission="sic.ver.propio"><SicRepository /></PermissionGuard>
               } />
               
               <Route path="/ayuda" element={

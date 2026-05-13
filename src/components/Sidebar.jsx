@@ -9,7 +9,8 @@ import {
     ChevronDownIcon, 
     ChevronRightIcon, 
     Bars3Icon, 
-    XMarkIcon  
+    XMarkIcon,
+    DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 
 const canAccess = (user, permissionName) => {
@@ -201,6 +202,17 @@ export default function Sidebar() {
                             onItemClick={handleMobileLinkClick}
                         >
                             Herramientas
+                        </NavItem>
+                    )}
+
+                    {canAccess(user, 'sic.ver.propio') && (
+                        <NavItem 
+                            to="/sic/repositorio" 
+                            icon={DocumentDuplicateIcon} 
+                            isCollapsed={isCollapsed && !isMobileOpen}
+                            onItemClick={handleMobileLinkClick}
+                        >
+                            Calidad (SIC)
                         </NavItem>
                     )}
 

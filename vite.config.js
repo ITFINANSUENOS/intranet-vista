@@ -7,4 +7,12 @@ export default defineConfig({
   plugins: [react(),
      tailwindcss(),
   ],
+  server: {
+    watch: {
+      usePolling: true,
+    },
+    host: true, // necesario para docker
+    strictPort: true,
+    port: 5173,
+  },
 })
